@@ -1,0 +1,5 @@
+# Ignore these files when commiting in git
+.DS_Store
+mandelbrot
+*.hi
+*.o

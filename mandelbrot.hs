@@ -15,13 +15,13 @@ transform w h (x, y) = (x',y')
 -- pointCheck (x,y) = iterate (\z -> z^2 + (x, +y)) (x, +y) !! 500
 
 -- dummy to make it compile
-pointCheck (x,y) = 1::Int
+--pointCheck (x,y) = 1::Int
 
---pointCheck :: (Float, Float) -> Int
---pointCheck (x,y) = do let a = (x :+ y)
---                      let iters = iterate (\z -> z^2 + a) a 
---                      let b = (iters !! 500) 
---                      return (1::Int)
+pointCheck :: (Float, Float) -> Int
+pointCheck (x,y) = do let a = (x :+ y)
+                      let iters = iterate (\z -> z^2 + a) a 
+                      let b = (iters !! 500) 
+                      fromEnum (magnitude(b)<2)
 
 appendPixel :: String -> Int -> IO ()
 appendPixel s i = appendFile s ( (show i) ++" ")
@@ -58,9 +58,9 @@ main = do args <- getArgs
           let filename = args !! 2
           let points = [(x,y) | x<- [1..width], y <-[1..height]]
           let mpoints = map (transform width height) points
-          print  $ mpoints !! 0
+          --print  $ mpoints !! 0
           let mbrot = map pointCheck mpoints
-          print mbrot
+          --print mbrot
           let mfile = PPM {
                       pWidth = width,
                       pHeight = height,

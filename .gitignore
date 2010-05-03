@@ -1,6 +1,6 @@
 # Ignore these files when commiting in git
 .DS_Store
 mandelbrot
-mosaik
+mosaic
 *.hi
 *.o

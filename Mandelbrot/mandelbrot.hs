@@ -11,16 +11,18 @@ transform w h (x, y) = (x',y')
                              y' = (( 2.0 / fromIntegral h) * fromIntegral y) - 1.0
 
 -- checks a list of iterations for convergence
-converge :: (RealFloat a) => Bool -> [Complex a] -> Bool
-converge False _ = False
-converge True [] = True
-converge True (x:xs) = converge (magnitude(x)<2) xs
+--converge :: (RealFloat a) => Bool -> [Complex a] -> Bool
+--converge False _ = False
+--converge True [] = True
+--converge True (x:xs) = converge (magnitude(x)<2) xs
+converge :: (RealFloat a) => [Complex a] -> Bool
+converge xs = all (\x -> magnitude x < 2) xs
 
 -- checks if a point is drawn or not
 pointCheck :: (Float, Float) -> Int
 pointCheck (x,y) = do let a = (x :+ y)
                       let iters = iterate (\z -> z^2 + a) a 
-                      fromEnum $ converge True ((take 100)(iters))
+                      fromEnum $ converge ((take 100)(iters))
 
 -- makes a list of integers to a string with whitespaces between entries
 stringify :: [Int] -> String

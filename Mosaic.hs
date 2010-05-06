@@ -2,7 +2,8 @@ import Text.Printf
 import System.Environment
 import System.Directory
 import Data.List
-
+import Control.Parallel
+import qualified Data.ByteString.Lazy.Char8 as BS
 
 data Pixel = Pixel {
     pR :: Int,
@@ -39,18 +40,23 @@ main = do args <- getArgs
 
 -- takes a list of strings (representing lines of a ppm file) 
 -- and turns them into a list of pixels
-str2pix :: [String] -> [Pixel]
+-- str2pix :: [String] -> [Pixel]
 str2pix [] = []
-str2pix (r:g:b:xs) =  Pixel{ pR = (read r),pG = read g, pB = read b} : (str2pix xs)
+str2pix (r:g:b:xs) =  
+    let val = Pixel{ pR = (r),pG = g, pB = b} 
+    in val : (str2pix xs)
+
+
 
 -- takes a filename and opens it as a ppm image
 readPPM :: String -> IO(Image)
-readPPM fn = do c <- readFile fn
-                let content = lines c
+readPPM fn = do c <- BS.readFile fn
+                let content = BS.lines c
+                    pixel   = map (read. BS.unpack) $ BS.words $ BS.unlines $ drop 3 content :: [Int]
                 return $ Image {
-                             w = read (words (content !! 1) !! 0) ::Int,
-                             h = read (words (content !! 1) !! 1) ::Int,
-                             pxs = str2pix $ concat $ map words (drop 3 content),
+                             w = read $ BS.unpack $ (BS.words (content !! 1) !! 0) ::Int,
+                             h = read $ BS.unpack $ (BS.words (content !! 1) !! 1) ::Int,
+                             pxs = str2pix pixel, -- $ map ss $ concat $ map words (drop 3 content),
                              iname = fn
                              }
 

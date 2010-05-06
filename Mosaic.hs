@@ -3,6 +3,7 @@ import Text.Printf
 import System.Environment
 import System.Directory
 import Data.List
+import Data.Char
 import Control.Parallel
 import qualified Data.ByteString.Lazy.Char8 as BS
 
@@ -34,7 +35,8 @@ main = do
 
 -- Writes statistics about all images in a list to file.
 writeStats :: [Image] -> IO ()
-writeStats files = 
+writeStats files = do
+    writeFile "DB.txt" ""
     mapM_ forEachFile files
   where forEachFile img = do
             let dat = printf "%s %s\n" (imageName img) (show (medianColor img))
@@ -43,26 +45,28 @@ writeStats files =
 
 -- Takes a list of strings (representing lines of a ppm file) and turns them
 -- into a list of pixels.
-str2pix :: [String] -> [Pixel]
+str2pix :: [Int] -> [Pixel]
 str2pix []         = []
-str2pix (r:g:b:xs) =  
-    let val = Pixel{ pR = (r),pG = g, pB = b} 
-    in val : (str2pix xs)
+str2pix (r:g:b:xs) =  Pixel r g b : (str2pix xs)
 
 
 -- Takes a filename and opens it as a ppm image.
 readPPM :: String -> IO Image
 readPPM fn = do 
-    c <- readFile fn
-    let content = lines c
-        [w,h]   = map read $ words (content !! 1)
-        pixel   = map read $ words $ unlines $ drop 3 content
+    c <- BS.readFile fn
+    let content = BS.lines c
+        [w,h]   = map (read . BS.unpack) $ BS.words (content !! 1)
+        pixel   = readInts $ BS.unwords $ drop 3 content
     return $ Image {
            imageWidth  = w
          , imageHeight = h
          , imageData   = str2pix pixel
          , imageName   = fn }
-
+  where readInts s =
+            case BS.readInt s of
+                Nothing       -> []
+                Just (v,rest) -> v : readInts (next rest)
+        next s = BS.dropWhile isSpace s
 
 -- Writes a ppm image under a given filename.
 writePPM :: String -> Image -> IO()

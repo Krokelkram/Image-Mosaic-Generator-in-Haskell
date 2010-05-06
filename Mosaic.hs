@@ -17,22 +17,24 @@ data Image = Image {
     iname :: String
     }
 
+-- writes statistics about all images in a list to file
 writeStats :: [Image] -> IO ()
-writeStats imgs = do let medColors = map medianColor imgs
-                     writeFile "DB.txt" "TODO"
+writeStats [] = return ()
+writeStats (x:xs) = do
+  appendFile "DB.txt" $ printf "%s %s\n" (iname x) ((Main.show (medianColor x))::String)
+  writeStats xs
 
 main :: IO ()
 main = do args <- getArgs
+          writeFile "DB.txt" ""
           dirContent <- getDirectoryContents (args !! 0)
           let ppmFileNames = filter (isSuffixOf ".ppm") dirContent
           print ppmFileNames
           images <- mapM readPPM ppmFileNames
-          --let medColors = map medianColor images
-          --let medStrs = map Main.show medColors :: [String]
-          --print medStrs
+          writeStats images
+         -- x <- readPPM "minippm_0.ppm"
+         -- putStrLn $ Main.show $ medianColor x
           
-          x <- readPPM "boat.ppm"
-          putStrLn $ Main.show $ medianColor x
           return ()
 
 -- takes a list of strings (representing lines of a ppm file) 
@@ -44,7 +46,6 @@ str2pix (r:g:b:xs) =  Pixel{ pR = (read r),pG = read g, pB = read b} : (str2pix 
 -- takes a filename and opens it as a ppm image
 readPPM :: String -> IO(Image)
 readPPM fn = do c <- readFile fn
-                print "Beginne Lesen"
                 let content = lines c
                 return $ Image {
                              w = read (words (content !! 1) !! 0) ::Int,

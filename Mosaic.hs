@@ -26,11 +26,18 @@ data Image = Image {
     } deriving (Show, Eq)
 
 
+start ::[String] -> IO ()
+start ("analyse":arg:_) = do
+  dirContent <- getDirectoryContents $ arg
+  images     <- mapM readPPM (filter (isSuffixOf ".ppm") dirContent)
+  writeStats images
+start ("generate":arg:_) = do
+  putStrLn "Image will be generated here..."
+start _ = putStrLn "Unknown parameter"
+ 
+
 main :: IO ()
-main = do 
-    dirContent <- getDirectoryContents =<< head `fmap` getArgs 
-    images     <- mapM readPPM (filter (isSuffixOf ".ppm") dirContent)
-    writeStats images
+main = start =<< getArgs
 
 
 -- Writes statistics about all images in a list to file.

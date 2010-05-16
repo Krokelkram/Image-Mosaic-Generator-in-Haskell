@@ -34,22 +34,17 @@ start ("analyse":arg:_) = do
 start ("generate":arg:_) = do
   putStrLn "Image will be generated here..."
   originalImg <- readPPM arg
-  let horiCuts = map (*imageWidth originalImg) $ cutPos (imageHeight originalImg) 3
-  let vertiCuts = cutPos (imageWidth originalImg) 3
-  --let subimages = map ( `take` (imageData originalImg)) horiCuts
-  --print $ imageData originalImg
-  --print horiCuts
-  let scheiben =  cut horiCuts (imageData originalImg)
-  --print scheiben
-  --let bla = (cutVert vertiCuts 1)
-  --print $ concat $ map (reverse.cutVert vertiCuts 2) scheiben
-  --print $ cutVert vertiCuts 2 (scheiben !! 0)
 
-  let lines = linesplit (imageWidth originalImg) (imageData originalImg)
+  -- splits the image into segments, each segment is a line for
+  -- one of the subimages
   let splitters =  concat $ map (columnsplit vertiCuts) lines
-  --print splitters
-  let columns = map (extractColumn 3 splitters) [1..3]
-  print columns
+          where vertiCuts = cutPos (imageWidth originalImg) 3
+                lines     = linesplit (imageWidth originalImg) (imageData originalImg)
+ 
+  let images =  map (extractSubImage horiCuts) columns
+          where horiCuts = cutPos (imageHeight originalImg) 3
+                columns  = map (extractColumn 3 splitters) [1..3]
+  writeStats $ concat images
   
   return ()
 start _ = putStrLn "Unknown parameter"
@@ -70,7 +65,14 @@ extractColumn _ [] _ = []
 extractColumn columns pxs index = pxs !! (index-1) : extractColumn columns (drop columns pxs) index
 
 -- extracts all subimages of a column using the supplied lengths
---extractSubImage :: [Int] -> 
+extractSubImage :: [Int] -> [[Pixel]] -> [Image]
+extractSubImage [] _ = []
+extractSubImage cuts column = newImage: extractSubImage (tail cuts) (drop (head cuts) column)
+    where newImage = Image {
+                       imageWidth  = length (head column)
+                     , imageHeight = head cuts
+                     , imageData   = concat $ take (head cuts) column
+                     , imageName   = "part" }
 
 
 cut :: [Int] -> [Pixel] -> [[Pixel]]

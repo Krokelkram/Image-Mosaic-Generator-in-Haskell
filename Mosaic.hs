@@ -35,10 +35,10 @@ data Fingerprint = Fingerprint {
 
 myFirstArray:: ST s (Int,Int)
 myFirstArray = do
-  arr <- newArray (1, 10) 37 :: ST s (STArray s Int Int)
-  a <- readArray arr 1
-  writeArray arr 1 64
-  b <- readArray arr 1
+  arr <- newArray ((1,1), (10,10)) 99 :: ST s (STArray s (Int,Int) Int)
+  writeArray arr (7,8) 123
+  a <- readArray arr (2,2)
+  b <- readArray arr (7,8)
   return (a,b)
 
 

@@ -5,6 +5,8 @@ import System.Directory
 import Data.List
 import Data.Char
 import Control.Parallel
+import Control.Monad.ST
+import Data.Array.ST
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 data Pixel = Pixel {
@@ -25,15 +27,35 @@ data Image = Image {
     , imageName   :: String
     } deriving (Show, Eq)
 
+data Fingerprint = Fingerprint {
+      fpFilename :: String
+    , fpMedian :: Pixel
+    } deriving (Show)
+
+
+myFirstArray:: ST s (Int,Int)
+myFirstArray = do
+  arr <- newArray (1, 10) 37 :: ST s (STArray s Int Int)
+  a <- readArray arr 1
+  writeArray arr 1 64
+  b <- readArray arr 1
+  return (a,b)
+
 
 start ::[String] -> IO ()
+start ("foo":_) = do
+  print $ runST myFirstArray
 start ("analyse":arg:_) = do
   dirContent <- getDirectoryContents arg
   images     <- mapM readPPM (filter (isSuffixOf ".ppm") dirContent)
   writeStats images
+  
+  --print bla
 start ("generate":arg:_) = do
   putStrLn "Image will be generated here..."
   originalImg <- readPPM arg
+  db <- readFile "DB.txt"
+  let fingerprints = map dbLine2Fingerprint (lines db)
 
   -- splits the image into segments, each segment is a line for
   -- one of the subimages
@@ -44,10 +66,28 @@ start ("generate":arg:_) = do
   let images =  map (extractSubImage horiCuts) columns
           where horiCuts = cutPos (imageHeight originalImg) 3
                 columns  = map (extractColumn 3 splitters) [1..3]
-  writeStats $ concat images
-  
+  --writeStats $ concat images
+  print (map medianColor (concat images))
+  let matches = map (fingerprints `findMatch` ) meds
+          where meds = map medianColor (concat images)
+  print matches
+  print fingerprints
   return ()
 start _ = putStrLn "Unknown parameter"
+
+-- takes a median color and a list of fingerprints
+-- returns a filename that best fit the median color
+findMatch :: [Fingerprint] -> Pixel -> String
+findMatch fps med = do
+  map (sumPixel.fpMedian) fps
+  "bla"
+
+sumPixel :: Pixel -> Int
+sumPixel px = pR px + pG px + pB px
+
+dbLine2Fingerprint :: String -> Fingerprint
+dbLine2Fingerprint ln = Fingerprint fn (Pixel (read r) (read g) (read b))
+    where (fn:r:g:b:_) = words ln
 
 -- splits the pixellist into lines
 linesplit :: Int -> [Pixel] -> [[Pixel]]

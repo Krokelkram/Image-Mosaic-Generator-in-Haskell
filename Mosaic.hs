@@ -20,6 +20,12 @@ data PPMImage s = PPMImage {
     ppmArray :: STArray s (Int,Int) Pixel
     }
 
+data SubImage s = SubImage {
+     parent :: PPMImage s
+    ,offsetX :: Int
+    ,offsetY :: Int
+    }
+
 instance Image (PPMImage s) s where
     get img (x,y) = do
       readArray (ppmArray img) (x,y) 
@@ -28,6 +34,18 @@ instance Image (PPMImage s) s where
     -- just to define them
     width _  = 42
     height _ = 42
+
+instance Image (SubImage s) s where
+    get (SubImage parent x' y') (x,y) = 
+        let (rx, ry) = (x'+x , y'+y)
+        in get parent (rx,ry)
+    set (SubImage parent x' y') (x,y) =
+        let (rx, ry) = (x'+x , y'+y)
+        in set parent (rx,ry)
+    width _  = 42
+    height _ = 42
+      
+
 
 data Pixel = Pixel {
       pR :: Int
@@ -75,74 +93,13 @@ start ("generate":arg:_) = do
   originalImg <- readPPM arg
   db <- readFile "DB.txt"
   let fingerprints = map dbLine2Fingerprint (lines db)
-
-  -- splits the image into segments, each segment is a line for
-  -- one of the subimages
-  let splitters =  concat $ map (columnsplit vertiCuts) lines
-          where vertiCuts = cutPos (imageWidth originalImg) 3
-                lines     = linesplit (imageWidth originalImg) (imageData originalImg)
- 
-  let images =  map (extractSubImage horiCuts) columns
-          where horiCuts = cutPos (imageHeight originalImg) 3
-                columns  = map (extractColumn 3 splitters) [1..3]
-  print (map medianColor (concat images))
-  let matches = map (fingerprints `findMatch` ) meds
-          where meds = map medianColor (concat images)
-  print matches
   print fingerprints
   return ()
 start _ = putStrLn "Unknown parameter"
 
--- takes a median color and a list of fingerprints
--- returns a filename that best fit the median color
-findMatch :: [Fingerprint] -> Pixel -> String
-findMatch fps med = do
-  map (sumPixel.fpMedian) fps
-  "bla"
-
-sumPixel :: Pixel -> Int
-sumPixel px = pR px + pG px + pB px
-
 dbLine2Fingerprint :: String -> Fingerprint
 dbLine2Fingerprint ln = Fingerprint fn (Pixel (read r) (read g) (read b))
     where (fn:r:g:b:_) = words ln
-
--- splits the pixellist into lines
-linesplit :: Int -> [Pixel] -> [[Pixel]]
-linesplit _ [] = []
-linesplit width pxs = take width pxs : linesplit width (drop width pxs)
-
--- splits an image line into parts of given length
-columnsplit :: [Int] -> [Pixel] -> [[Pixel]]
-columnsplit _ [] = []
-columnsplit cuts pxs = take (head cuts) pxs : columnsplit (tail cuts) (drop (head cuts) pxs)
-
--- extracts a single column with given index from the image
-extractColumn :: Int -> [[Pixel]] -> Int -> [[Pixel]]
-extractColumn _ [] _ = []
-extractColumn columns pxs index = pxs !! (index-1) : extractColumn columns (drop columns pxs) index
-
--- extracts all subimages of a column using the supplied lengths
-extractSubImage :: [Int] -> [[Pixel]] -> [BadImage]
-extractSubImage [] _ = []
-extractSubImage cuts column = newImage: extractSubImage (tail cuts) (drop (head cuts) column)
-    where newImage = BadImage {
-                       imageWidth  = length (head column)
-                     , imageHeight = head cuts
-                     , imageData   = concat $ take (head cuts) column
-                     , imageName   = "part" }
-
-
-cut :: [Int] -> [Pixel] -> [[Pixel]]
-cut [] _ = [] 
-cut cutPos pxs = (take (head cutPos) pxs) : (cut (tail cutPos) (drop (head cutPos) pxs) )
-
--- takes a length (either width or height) and the number of parts we want to cut it into
--- returns the length of each parts (cutPos 10 3 would return [3,3,4])
-cutPos :: Int -> Int -> [Int]
-cutPos _ 0 = []
-cutPos height parts = rowsToTake : cutPos (height - rowsToTake) (parts - 1)
-    where rowsToTake = (height `div` parts)
 
 
 main :: IO ()

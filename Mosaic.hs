@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
 module Main where
 import Text.Printf
 import System.Environment
@@ -5,9 +6,28 @@ import System.Directory
 import Data.List
 import Data.Char
 import Control.Parallel
-import Control.Monad.ST
+import Control.Monad.ST.Strict
 import Data.Array.ST
 import qualified Data.ByteString.Lazy.Char8 as BS
+
+class Image a s where
+    get :: a -> (Int, Int) -> ST s Pixel
+    set :: a -> (Int, Int) ->  Pixel -> ST s ()
+    width :: a -> Int
+    height :: a -> Int
+
+data PPMImage s = PPMImage {
+    ppmArray :: STArray s (Int,Int) Pixel
+    }
+
+instance Image (PPMImage s) s where
+    get img (x,y) = do
+      readArray (ppmArray img) (x,y) 
+    set img (x,y) px = do
+      writeArray (ppmArray img) (x,y) px
+    -- just to define them
+    width _  = 42
+    height _ = 42
 
 data Pixel = Pixel {
       pR :: Int
@@ -20,7 +40,7 @@ instance Show Pixel where
     show (Pixel r g b) = printf "%d %d %d" r g b
 
 
-data Image = Image {
+data BadImage = BadImage {
       imageWidth  :: Int
     , imageHeight :: Int
     , imageData   :: [Pixel]
@@ -50,7 +70,6 @@ start ("analyse":arg:_) = do
   images     <- mapM readPPM (filter (isSuffixOf ".ppm") dirContent)
   writeStats images
   
-  --print bla
 start ("generate":arg:_) = do
   putStrLn "Image will be generated here..."
   originalImg <- readPPM arg
@@ -66,7 +85,6 @@ start ("generate":arg:_) = do
   let images =  map (extractSubImage horiCuts) columns
           where horiCuts = cutPos (imageHeight originalImg) 3
                 columns  = map (extractColumn 3 splitters) [1..3]
-  --writeStats $ concat images
   print (map medianColor (concat images))
   let matches = map (fingerprints `findMatch` ) meds
           where meds = map medianColor (concat images)
@@ -105,10 +123,10 @@ extractColumn _ [] _ = []
 extractColumn columns pxs index = pxs !! (index-1) : extractColumn columns (drop columns pxs) index
 
 -- extracts all subimages of a column using the supplied lengths
-extractSubImage :: [Int] -> [[Pixel]] -> [Image]
+extractSubImage :: [Int] -> [[Pixel]] -> [BadImage]
 extractSubImage [] _ = []
 extractSubImage cuts column = newImage: extractSubImage (tail cuts) (drop (head cuts) column)
-    where newImage = Image {
+    where newImage = BadImage {
                        imageWidth  = length (head column)
                      , imageHeight = head cuts
                      , imageData   = concat $ take (head cuts) column
@@ -132,7 +150,7 @@ main = start =<< getArgs
 
 
 -- Writes statistics about all images in a list to file.
-writeStats :: [Image] -> IO ()
+writeStats :: [BadImage] -> IO ()
 writeStats files = do
     writeFile "DB.txt" ""
     mapM_ forEachFile files
@@ -149,13 +167,13 @@ str2pix (r:g:b:xs) =  Pixel r g b : (str2pix xs)
 
 
 -- Takes a filename and opens it as a ppm image.
-readPPM :: String -> IO Image
+readPPM :: String -> IO BadImage
 readPPM fn = do 
     c <- BS.readFile fn
     let content = BS.lines c
         [w,h]   = map (read . BS.unpack) $ BS.words (content !! 1)
         pixel   = readInts $ BS.unwords $ drop 3 content
-    return $ Image {
+    return $ BadImage {
            imageWidth  = w
          , imageHeight = h
          , imageData   = str2pix pixel
@@ -167,15 +185,15 @@ readPPM fn = do
         next s = BS.dropWhile isSpace s
 
 -- Writes a ppm image under a given filename.
-writePPM :: String -> Image -> IO()
-writePPM fn (Image w h dat _) = do 
+writePPM :: String -> BadImage -> IO()
+writePPM fn (BadImage w h dat _) = do 
     writeFile fn $ printf "P3\n%d %d\n255\n" w h
     appendFile fn (unwords $ map show dat)
 
 
 -- Calculates the median color of an image.
-medianColor :: Image -> Pixel
-medianColor (Image width height pixel _) = 
+medianColor :: BadImage -> Pixel
+medianColor (BadImage width height pixel _) = 
     Pixel (average pR) (average pG) (average pB)
   where average comp = sum (map comp pixel) `div` (width * height)
 

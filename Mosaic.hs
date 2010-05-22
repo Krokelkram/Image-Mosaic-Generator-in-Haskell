@@ -17,7 +17,9 @@ class Image a s where
     height :: a -> Int
 
 data PPMImage s = PPMImage {
-    ppmArray :: STArray s (Int,Int) Pixel
+     ppmArray :: STArray s (Int,Int) Pixel
+    ,ppmWidth :: Int
+    ,ppmHeight :: Int
     }
 
 data SubImage s = SubImage {
@@ -73,10 +75,10 @@ data Fingerprint = Fingerprint {
 
 myFirstArray:: ST s (Int,Int)
 myFirstArray = do
-  arr <- newArray ((1,1), (10,10)) 99 :: ST s (STArray s (Int,Int) Int)
-  writeArray arr (7,8) 123
-  a <- readArray arr (2,2)
-  b <- readArray arr (7,8)
+  arr <- newListArray ((1,1), (2,2)) [1,2,3,4] :: ST s (STArray s (Int,Int) Int)
+  writeArray arr (1,1) 123
+  a <- readArray arr (1,2)
+  b <- readArray arr (1,1)
   return (a,b)
 
 
@@ -85,12 +87,16 @@ start ("foo":_) = do
   print $ runST myFirstArray
 start ("analyse":arg:_) = do
   dirContent <- getDirectoryContents arg
-  images     <- mapM readPPM (filter (isSuffixOf ".ppm") dirContent)
+  let filesWithPPMSuffix = (filter (isSuffixOf ".ppm") dirContent)
+  rawImages <- mapM BS.readFile filesWithPPMSuffix
+  let dataNamePairs = zip rawImages filesWithPPMSuffix
+  let images = runST $ mapM readPPM dataNamePairs
   writeStats images
   
 start ("generate":arg:_) = do
   putStrLn "Image will be generated here..."
-  originalImg <- readPPM arg
+  rawImage <- BS.readFile arg
+  let originalImg = runST $ readPPM (rawImage, arg)
   db <- readFile "DB.txt"
   let fingerprints = map dbLine2Fingerprint (lines db)
   print fingerprints
@@ -113,6 +119,7 @@ writeStats files = do
     mapM_ forEachFile files
   where forEachFile img = do
             let dat = printf "%s %s\n" (imageName img) (show (medianColor img))
+            print dat
             appendFile "DB.txt" dat
           
 
@@ -124,13 +131,12 @@ str2pix (r:g:b:xs) =  Pixel r g b : (str2pix xs)
 
 
 -- Takes a filename and opens it as a ppm image.
-readPPM :: String -> IO BadImage
-readPPM fn = do 
-    c <- BS.readFile fn
-    let content = BS.lines c
+readPPM :: (BS.ByteString, String) -> ST s BadImage
+readPPM (rawImage, fn) = do 
+    let content = BS.lines rawImage
         [w,h]   = map (read . BS.unpack) $ BS.words (content !! 1)
         pixel   = readInts $ BS.unwords $ drop 3 content
-    return $ BadImage {
+    return BadImage {
            imageWidth  = w
          , imageHeight = h
          , imageData   = str2pix pixel

@@ -6,7 +6,7 @@ import System.Directory
 import Data.List
 import Data.Char
 import Control.Parallel
-import Control.Monad.ST.Strict
+import Control.Monad.ST.Lazy
 import Data.Array.ST
 import qualified Data.ByteString.Lazy.Char8 as BS
 
@@ -82,6 +82,14 @@ myFirstArray = do
   b <- readArray arr (1,1)
   return (a,b)
 
+analyseImage :: String -> IO String
+analyseImage filename = do
+  rawImage <- BS.readFile filename
+  return $ runST $ do
+   image <- readPPM (rawImage, filename)
+   statStr <- getStatString image
+   return statStr
+
 
 start ::[String] -> IO ()
 start ("foo":_) = do
@@ -89,12 +97,7 @@ start ("foo":_) = do
 start ("analyse":arg:_) = do
   dirContent <- getDirectoryContents arg
   let filesWithPPMSuffix = (filter (isSuffixOf ".ppm") dirContent)
-  rawImages <- mapM BS.readFile filesWithPPMSuffix
-  let dataNamePairs = zip rawImages filesWithPPMSuffix
-  let statisticStrings = runST $ do 
-                 images <- mapM readPPM dataNamePairs
-                 statStr <- mapM getStatString images
-                 return statStr
+  statisticStrings <- mapM analyseImage filesWithPPMSuffix
   writeFile "DB.txt" $ unlines statisticStrings
   print statisticStrings
   

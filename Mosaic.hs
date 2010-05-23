@@ -20,6 +20,7 @@ data PPMImage s = PPMImage {
      ppmArray :: STArray s (Int,Int) Pixel
     ,ppmWidth :: Int
     ,ppmHeight :: Int
+    ,ppmName :: String
     }
 
 data SubImage s = SubImage {
@@ -90,16 +91,23 @@ start ("analyse":arg:_) = do
   let filesWithPPMSuffix = (filter (isSuffixOf ".ppm") dirContent)
   rawImages <- mapM BS.readFile filesWithPPMSuffix
   let dataNamePairs = zip rawImages filesWithPPMSuffix
-  let images = runST $ mapM readPPM dataNamePairs
-  writeStats images
+  let statisticStrings = runST $ do 
+                 images <- mapM readPPM dataNamePairs
+                 statStr <- mapM getStatString images
+                 return statStr
+  writeFile "DB.txt" $ unlines statisticStrings
+  print statisticStrings
   
 start ("generate":arg:_) = do
   putStrLn "Image will be generated here..."
-  rawImage <- BS.readFile arg
-  let originalImg = runST $ readPPM (rawImage, arg)
   db <- readFile "DB.txt"
   let fingerprints = map dbLine2Fingerprint (lines db)
   print fingerprints
+  rawImage <- BS.readFile arg
+  let originalImg = runST $ do 
+                 readPPM (rawImage, arg)
+                 return "To be implemented"
+
   return ()
 start _ = putStrLn "Unknown parameter"
 
@@ -111,17 +119,10 @@ dbLine2Fingerprint ln = Fingerprint fn (Pixel (read r) (read g) (read b))
 main :: IO ()
 main = start =<< getArgs
 
-
--- Writes statistics about all images in a list to file.
-writeStats :: [BadImage] -> IO ()
-writeStats files = do
-    writeFile "DB.txt" ""
-    mapM_ forEachFile files
-  where forEachFile img = do
-            let dat = printf "%s %s\n" (imageName img) (show (medianColor img))
-            print dat
-            appendFile "DB.txt" dat
-          
+getStatString :: (PPMImage s) -> ST s String
+getStatString img = do
+  medCol <- medianColor img
+  return $ printf "%s %s" (ppmName img) (show medCol)
 
 -- Takes a list of strings (representing lines of a ppm file) and turns them
 -- into a list of pixels.
@@ -129,34 +130,31 @@ str2pix :: [Int] -> [Pixel]
 str2pix []         = []
 str2pix (r:g:b:xs) =  Pixel r g b : (str2pix xs)
 
-
 -- Takes a filename and opens it as a ppm image.
-readPPM :: (BS.ByteString, String) -> ST s BadImage
+readPPM ::  (BS.ByteString, String) -> ST s (PPMImage s)
 readPPM (rawImage, fn) = do 
     let content = BS.lines rawImage
         [w,h]   = map (read . BS.unpack) $ BS.words (content !! 1)
         pixel   = readInts $ BS.unwords $ drop 3 content
-    return BadImage {
-           imageWidth  = w
-         , imageHeight = h
-         , imageData   = str2pix pixel
-         , imageName   = fn }
+    xy <- newListArray ((1,1), (w,h)) (str2pix pixel) :: ST s (STArray s (Int,Int) Pixel)
+    return PPMImage {
+           ppmWidth  = w
+         , ppmHeight = h
+         , ppmName = fn
+         , ppmArray = xy }
   where readInts s =
             case BS.readInt s of
                 Nothing       -> []
                 Just (v,rest) -> v : readInts (next rest)
         next s = BS.dropWhile isSpace s
 
--- Writes a ppm image under a given filename.
-writePPM :: String -> BadImage -> IO()
-writePPM fn (BadImage w h dat _) = do 
-    writeFile fn $ printf "P3\n%d %d\n255\n" w h
-    appendFile fn (unwords $ map show dat)
-
-
 -- Calculates the median color of an image.
-medianColor :: BadImage -> Pixel
-medianColor (BadImage width height pixel _) = 
-    Pixel (average pR) (average pG) (average pB)
-  where average comp = sum (map comp pixel) `div` (width * height)
+-- Still a bit clumsy because of getElems
+medianColor :: (PPMImage s) -> ST s Pixel
+medianColor image = do
+    listOfPixel <- getElems $ ppmArray image
+    let red =  sum (map pR listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
+    let green =  sum (map pG listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
+    let blue =  sum (map pB listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
+    return $ Pixel red green blue
 

@@ -10,55 +10,8 @@ import Control.Monad.ST.Lazy
 import Data.Array.ST
 import qualified Data.ByteString.Lazy.Char8 as BS
 
-class Image a s where
-    get :: a -> (Int, Int) -> ST s Pixel
-    set :: a -> (Int, Int) ->  Pixel -> ST s ()
-    width :: a -> Int
-    height :: a -> Int
+import MosaicImage
 
-data PPMImage s = PPMImage {
-     ppmArray :: STArray s (Int,Int) Pixel
-    ,ppmWidth :: Int
-    ,ppmHeight :: Int
-    ,ppmName :: String
-    }
-
-data SubImage s = SubImage {
-     parent :: PPMImage s
-    ,offsetX :: Int
-    ,offsetY :: Int
-    ,subWidth :: Int
-    ,subHeight :: Int
-    }
-
-instance Image (PPMImage s) s where
-    get img (x,y) = do
-      readArray (ppmArray img) (x,y) 
-    set img (x,y) px = do
-      writeArray (ppmArray img) (x,y) px
-    -- just to define them
-    width _  = 42
-    height _ = 42
-
-instance Image (SubImage s) s where
-    get (SubImage parent x' y' _ _) (x,y) = 
-        let (rx, ry) = (x'+x , y'+y)
-        in get parent (rx,ry)
-    set (SubImage parent x' y' _ _) (x,y) =
-        let (rx, ry) = (x'+x , y'+y)
-        in set parent (rx,ry)
-    width _  = 42
-    height _ = 42
-      
-data Pixel = Pixel {
-      pR :: Int
-    , pG :: Int
-    , pB :: Int
-    } deriving Eq
-
--- Shows contents of a pixel as string.
-instance Show Pixel where
-    show (Pixel r g b) = printf "%d %d %d" r g b
 
 -- contains information about an image that is useful for mosaic tile matching (only medianColor so far)
 data Fingerprint = Fingerprint {
@@ -77,17 +30,13 @@ analyseImage filename = do
 
 -- takes a ppmImage that is split horizontally and vertically
 tileImage :: (PPMImage s) -> Int -> Int -> ST s [SubImage s]
-tileImage img partsX partsY = do
-  let array = ppmArray img
-  let w = ppmWidth img
-  let h = ppmHeight img
-  let ws = w `div` partsX
-  let hs = h `div` partsY
-  let xs = [x | x <- [0, ws..w-1]]
-  let ys = [y | y <- [0, hs..h-1]]
-  let cs = [(x,y) | x <- xs, y <- ys]
-  x <- mapM (\(x,y) -> return $ SubImage img x y ws hs) cs
-  return x
+tileImage img partsX partsY = return =<< mapM (\(x,y) -> return $ SubImage img x y ws hs) cs
+  where w     = ppmWidth img
+        h     = ppmHeight img
+        ws    = w `div` partsX
+        hs    = h `div` partsY
+        cs    = [(x,y) | x <- [0, ws..w-1], y <- [0, hs..h-1]]
+  
   
 start ::[String] -> IO ()
 start ("analyse":arg:_) = do
@@ -109,8 +58,22 @@ start ("generate":arg:_) = do
                  subMedians <- mapM medianColorSub tiles
                  return $ subMedians
   print originalImg
+  print $ map (findMatch fingerprints) originalImg
   return ()
 start _ = putStrLn "Unknown parameter"
+
+-- takes a list of fingerprints and returns the name of the image that best matches the color of a Pixel
+findMatch :: [Fingerprint] -> Pixel -> String
+findMatch fps pix = snd $ minDiff (map (colorDiff pix) fps)
+    where minDiff [x] = x
+          minDiff (x1:x2:xs) = if (fst x1) < (fst x2)
+                               then minDiff $ x1:xs
+                               else minDiff $ x2:xs
+          
+
+-- returns a tuple of color difference and filename
+colorDiff :: Pixel -> Fingerprint -> (Int, String)
+colorDiff p1 (Fingerprint fn p2) = (abs ((pR p1 - pR p2)+(pG p1 - pG p2)+(pB p1 - pB p2)), fn)
 
 -- takes a line from database and returns its information as an image fingerprint
 dbLine2Fingerprint :: String -> Fingerprint

@@ -10,14 +10,14 @@ import Control.Monad.ST.Lazy
 import Data.Array.ST
 import qualified Data.ByteString.Lazy.Char8 as BS
 
-import MosaicImage
+import Types
 
-
--- contains information about an image that is useful for mosaic tile matching (only medianColor so far)
-data Fingerprint = Fingerprint {
-      fpFilename :: String
-    , fpMedian :: Pixel
-    } deriving (Show)
+main :: IO ()
+main = do
+  args <- getArgs
+  case head args of
+    "analyse" -> analyse $ tail args
+    "generate" -> generate $ tail args
 
 -- takes a filename and returns its statistics as a string
 analyseImage :: String -> String ->IO ()
@@ -38,32 +38,27 @@ tileImage img partsX partsY = return =<< mapM (\(x,y) -> return $ SubImage img x
         hs    = h `div` partsY
         cs    = [(x,y) | x <- [0, ws..w-1], y <- [0, hs..h-1]]
   
-  
-start ::[String] -> IO ()
-start ("analyse":arg:_) = do
-  dirContent <- getDirectoryContents arg
+analyse :: [String] -> IO ()
+analyse (path:xs) = do
+  dirContent <- getDirectoryContents path
   writeFile "DB.txt" ""
   let filesWithPPMSuffix = (filter (isSuffixOf ".ppm") dirContent)
   mapM (analyseImage "DB.txt") filesWithPPMSuffix
-  --writeFile "DB.txt" $ unlines statisticStrings
-  --print statisticStrings
   print "Fertig"
-  
-start ("generate":arg:_) = do
+
+generate :: [String] -> IO ()
+generate (fn:xs) = do
   putStrLn "Image will be generated here..."
   db <- readFile "DB.txt"
   let fingerprints = map dbLine2Fingerprint (lines db)
-  --print fingerprints
-  rawImage <- BS.readFile arg
+  rawImage <- BS.readFile fn
   let originalImg = runST $ do 
-                 image <- readPPM (rawImage, arg)
+                 image <- readPPM (rawImage, fn)
                  tiles <- tileImage image 2 2
                  subMedians <- mapM medianColorSub tiles
                  return $ subMedians
   print originalImg
   print $ map (findMatch fingerprints) originalImg
-  return ()
-start _ = putStrLn "Unknown parameter"
 
 -- takes a list of fingerprints and returns the name of the image that best matches the color of a Pixel
 findMatch :: [Fingerprint] -> Pixel -> String
@@ -82,10 +77,6 @@ colorDiff p1 (Fingerprint fn p2) = (abs ((pR p1 - pR p2)+(pG p1 - pG p2)+(pB p1 
 dbLine2Fingerprint :: String -> Fingerprint
 dbLine2Fingerprint ln = Fingerprint fn (Pixel (read r) (read g) (read b))
     where (fn:r:g:b:_) = words ln
-
-
-main :: IO ()
-main = start =<< getArgs
 
 -- takes a ppmImage and returns its statistics as a string
 getStatString :: (PPMImage s) -> ST s String

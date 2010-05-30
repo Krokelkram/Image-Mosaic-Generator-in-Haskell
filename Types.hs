@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
-module MosaicImage where
+module Types where
 import Text.Printf
 import Control.Monad.ST.Lazy
 import Data.Array.ST
@@ -30,9 +30,8 @@ instance Image (PPMImage s) s where
       readArray (ppmArray img) (x,y) 
     set img (x,y) px = do
       writeArray (ppmArray img) (x,y) px
-    -- just to define them
-    width _  = 42
-    height _ = 42
+    width img  = ppmWidth img
+    height img = ppmWidth img
 
 instance Image (SubImage s) s where
     get (SubImage parent x' y' _ _) (x,y) = 
@@ -49,6 +48,12 @@ data Pixel = Pixel {
     , pG :: Int
     , pB :: Int
     } deriving Eq
+
+-- contains information about an image that is useful for mosaic tile matching (only medianColor so far)
+data Fingerprint = Fingerprint {
+      fpFilename :: String
+    , fpMedian :: Pixel
+    } deriving (Show)
 
 -- Shows contents of a pixel as string.
 instance Show Pixel where

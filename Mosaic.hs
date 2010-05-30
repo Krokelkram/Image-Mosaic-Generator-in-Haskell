@@ -20,13 +20,14 @@ data Fingerprint = Fingerprint {
     } deriving (Show)
 
 -- takes a filename and returns its statistics as a string
-analyseImage :: String -> IO String
-analyseImage filename = do
+analyseImage :: String -> String ->IO ()
+analyseImage dbname filename= do
   rawImage <- BS.readFile filename
-  return $ runST $ do
+  appendFile dbname $ runST $ do
    image <- readPPM (rawImage, filename)
    statStr <- getStatString image
    return statStr
+   
 
 -- takes a ppmImage that is split horizontally and vertically
 tileImage :: (PPMImage s) -> Int -> Int -> ST s [SubImage s]
@@ -41,10 +42,12 @@ tileImage img partsX partsY = return =<< mapM (\(x,y) -> return $ SubImage img x
 start ::[String] -> IO ()
 start ("analyse":arg:_) = do
   dirContent <- getDirectoryContents arg
+  writeFile "DB.txt" ""
   let filesWithPPMSuffix = (filter (isSuffixOf ".ppm") dirContent)
-  statisticStrings <- mapM analyseImage filesWithPPMSuffix
-  writeFile "DB.txt" $ unlines statisticStrings
-  print statisticStrings
+  mapM (analyseImage "DB.txt") filesWithPPMSuffix
+  --writeFile "DB.txt" $ unlines statisticStrings
+  --print statisticStrings
+  print "Fertig"
   
 start ("generate":arg:_) = do
   putStrLn "Image will be generated here..."
@@ -88,7 +91,7 @@ main = start =<< getArgs
 getStatString :: (PPMImage s) -> ST s String
 getStatString img = do
   medCol <- medianColor img
-  return $ printf "%s %s" (ppmName img) (show medCol)
+  return $ printf "%s %s\n" (ppmName img) (show medCol)
 
 -- Takes a list of strings (representing lines of a ppm file) and turns them
 -- into a list of pixels.

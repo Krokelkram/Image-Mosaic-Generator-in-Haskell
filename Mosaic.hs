@@ -6,6 +6,7 @@ import System.Directory
 import Data.List
 import Data.Char
 import Control.Parallel
+import Control.Monad
 import Control.Monad.ST.Lazy
 import Data.Array.ST
 import qualified Data.ByteString.Lazy.Char8 as BS
@@ -18,10 +19,26 @@ main = do
   case head args of
     "analyse" -> analyse $ tail args
     "generate" -> generate $ tail args
+    "debug" -> print =<< do
+                   rawImage <- BS.readFile "test4x6.ppm"
+                   let pxs = runST $ do 
+                               i <- readPPM (rawImage, "test6x6.ppm")
+                               merged <- merge [i,i,i,i] (4,6) (2,2)
+                               --scaled <- rescale 100 100 i 
+                               px <- getElems $ ppmArray merged
+                               return px
+                   writePPM pxs (4,6) "blatest.ppm"
+                   return "done"
+    "debug2" -> print $ runST $ do
+                   xy <- newListArray ((1,1),(5,4)) [1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5] :: ST s (STArray s (Int,Int) Int)
+                   --res <- getElems xy
+                   res <- readArray xy (1,4)
+                   return res
+                           
 
--- takes a filename and returns its statistics as a string
+-- takes a filename and appends its statistics to a text file
 analyseImage :: String -> String ->IO ()
-analyseImage dbname filename= do
+analyseImage dbname filename = do
   rawImage <- BS.readFile filename
   appendFile dbname $ runST $ do
    image <- readPPM (rawImage, filename)
@@ -36,8 +53,47 @@ tileImage img partsX partsY = return =<< mapM (\(x,y) -> return $ SubImage img x
         h     = ppmHeight img
         ws    = w `div` partsX
         hs    = h `div` partsY
-        cs    = [(x,y) | x <- [0, ws..w-1], y <- [0, hs..h-1]]
-  
+        cs    = [(x,y) | y <- getCutList partsY h, x <- getCutList partsX w]
+
+-- takes a number of parts and a length that is then cut into that many parts
+-- returns a list of cutpositions
+-- example: to cut '14' into 4 parts of almost the same size, we can cut it at [0,4,8,11]
+getCutList :: Int -> Int -> [Int]
+getCutList 1 length = [0]
+getCutList parts length =  getCutList (parts-1) (length-section) ++ [length-section]
+    where section = floor $ (fromIntegral length) / (fromIntegral parts)
+
+-- rescales an image to the given size
+rescale :: Int -> Int -> (BS.ByteString, String) -> ST s (PPMImage s)
+rescale w h (rawPixel, fname) = do
+  img <- readPPM (rawPixel, fname)
+  tiles <- tileImage img w h 
+  pixels <- mapM medianColorSub tiles
+  pxArr <- newListArray ((1,1), (w,h)) pixels :: ST s (STArray s (Int,Int) Pixel)
+  let finalImage = PPMImage pxArr w h "final"
+  return finalImage
+
+-- pastes a small image into a bigger image at the given position
+pasteImage :: PPMImage s -> (PPMImage s, (Int,Int)) -> ST s ()
+pasteImage finalImg (tileImg, (offX, offY)) = do
+  forM_ [1..ppmWidth tileImg] $ \x -> do
+    forM_ [1..ppmHeight tileImg] $ \y -> do
+      pixel <- get tileImg (x,y)
+      set finalImg (x+offX,y+offY) pixel
+  return ()
+
+-- merges all given images into one big image
+-- needs the size of the small images and the number of rows and columns
+merge :: [PPMImage s] -> (Int,Int) -> (Int,Int) -> ST s (PPMImage s)
+merge tileImages (tileW, tileH) (partsX,partsY) = do
+  pxs <- newArray ((1,1),(partsY * tileH, partsX * tileW)) (Pixel 0 0 0):: ST s (STArray s (Int,Int) Pixel)
+  let finalImage = PPMImage pxs (partsX * tileW) (partsY * tileH) "bla"
+  let mergeOffset = [(x,y) | y <- [0,tileH..((partsY * tileH)-1)], x <- [0, tileW..((partsX * tileW)-1)]]
+  let tileOffsetPairs = zip tileImages mergeOffset
+  mapM_ (pasteImage finalImage) tileOffsetPairs 
+  return $ finalImage
+
+-- analyses a folder by opening the files in it and writing their stats to file
 analyse :: [String] -> IO ()
 analyse (path:xs) = do
   dirContent <- getDirectoryContents path
@@ -46,6 +102,7 @@ analyse (path:xs) = do
   mapM (analyseImage "DB.txt") filesWithPPMSuffix
   print "Fertig"
 
+-- generates a mosaic using the given filename as reference
 generate :: [String] -> IO ()
 generate (fn:xs) = do
   putStrLn "Image will be generated here..."
@@ -58,7 +115,18 @@ generate (fn:xs) = do
                  subMedians <- mapM medianColorSub tiles
                  return $ subMedians
   print originalImg
-  print $ map (findMatch fingerprints) originalImg
+  
+  let bestImageNames = map (findMatch fingerprints) originalImg
+  rawTileFiles <- mapM BS.readFile bestImageNames
+  
+  let finalImg = runST $ do
+                     scaledTileFiles <- mapM (rescale 25 25) (zip rawTileFiles bestImageNames)
+                     finalImg <- merge scaledTileFiles (25,25) (2,2) 
+                     bla <- getElems $ ppmArray finalImg
+                     return bla
+  print bestImageNames
+  --print finalImg
+  writePPM finalImg (50,50) "final.ppm" 
 
 -- takes a list of fingerprints and returns the name of the image that best matches the color of a Pixel
 findMatch :: [Fingerprint] -> Pixel -> String
@@ -90,13 +158,18 @@ str2pix :: [Int] -> [Pixel]
 str2pix []         = []
 str2pix (r:g:b:xs) =  Pixel r g b : (str2pix xs)
 
+writePPM :: [Pixel] -> (Int,Int) -> String -> IO ()
+writePPM pxs (w,h) fname = do
+  writeFile fname $ printf "P3\n%d %d\n255\n" w h
+  appendFile fname (unwords $ map show (pxs))
+
 -- Takes a filename and opens it as a ppm image.
 readPPM ::  (BS.ByteString, String) -> ST s (PPMImage s)
 readPPM (rawImage, fn) = do 
     let content = BS.lines rawImage
         [w,h]   = map (read . BS.unpack) $ BS.words (content !! 1)
         pixel   = readInts $ BS.unwords $ drop 3 content
-    xy <- newListArray ((1,1), (w,h)) (str2pix pixel) :: ST s (STArray s (Int,Int) Pixel)
+    xy <- newListArray ((1,1), (h,w)) (str2pix pixel) :: ST s (STArray s (Int,Int) Pixel)
     return PPMImage {
            ppmWidth  = w
          , ppmHeight = h
@@ -117,6 +190,7 @@ medianColor image = do
     let green =  sum (map pG listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
     let blue =  sum (map pB listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
     return $ Pixel red green blue
+
 
 -- same as medianColor, but for SubImages. 
 -- Might be possible to merge these two later on

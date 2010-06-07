@@ -27,9 +27,9 @@ data SubImage s = SubImage {
 
 instance Image (PPMImage s) s where
     get img (x,y) = do
-      readArray (ppmArray img) (x,y) 
+      readArray (ppmArray img) (y,x) 
     set img (x,y) px = do
-      writeArray (ppmArray img) (x,y) px
+      writeArray (ppmArray img) (y,x) px
     width img  = ppmWidth img
     height img = ppmWidth img
 

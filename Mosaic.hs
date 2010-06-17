@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns #-}
 module Main where
 import Text.Printf
 import System.Environment
@@ -9,6 +10,7 @@ import Control.Parallel
 import Control.Monad
 import Control.Monad.ST.Lazy
 import Data.Array.ST
+import Debug.Trace
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 import Types
@@ -66,10 +68,10 @@ getCutList parts length =  getCutList (parts-1) (length-section) ++ [length-sect
 -- rescales an image to the given size
 rescale :: Int -> Int -> (BS.ByteString, String) -> ST s (PPMImage s)
 rescale w h (rawPixel, fname) = do
-  img <- readPPM (rawPixel, fname)
-  tiles <- tileImage img w h 
-  pixels <- mapM medianColorSub tiles
-  pxArr <- newListArray ((1,1), (w,h)) pixels :: ST s (STArray s (Int,Int) Pixel)
+  !img <- readPPM (rawPixel, fname)
+  !tiles <- tileImage img w h 
+  !pixels <- mapM medianColorSub tiles
+  !pxArr <- newListArray ((1,1), (w,h)) pixels :: ST s (STArray s (Int,Int) Pixel)
   let finalImage = PPMImage pxArr w h "final"
   return finalImage
 
@@ -111,7 +113,7 @@ generate (fn:xs) = do
   rawImage <- BS.readFile fn
   let originalImg = runST $ do 
                  image <- readPPM (rawImage, fn)
-                 tiles <- tileImage image 2 2
+                 tiles <- tileImage image 10 10
                  subMedians <- mapM medianColorSub tiles
                  return $ subMedians
   print originalImg
@@ -120,13 +122,13 @@ generate (fn:xs) = do
   rawTileFiles <- mapM BS.readFile bestImageNames
   
   let finalImg = runST $ do
-                     scaledTileFiles <- mapM (rescale 25 25) (zip rawTileFiles bestImageNames)
-                     finalImg <- merge scaledTileFiles (25,25) (2,2) 
+                     scaledTileFiles <- mapM (rescale 80 80) (zip rawTileFiles bestImageNames)
+                     !finalImg <- merge scaledTileFiles (80,80) (10,10) 
                      bla <- getElems $ ppmArray finalImg
                      return bla
   print bestImageNames
   --print finalImg
-  writePPM finalImg (50,50) "final.ppm" 
+  writePPM finalImg (800,800) "final.ppm" 
 
 -- takes a list of fingerprints and returns the name of the image that best matches the color of a Pixel
 findMatch :: [Fingerprint] -> Pixel -> String
@@ -139,7 +141,7 @@ findMatch fps pix = snd $ minDiff (map (colorDiff pix) fps)
 
 -- returns a tuple of color difference and filename
 colorDiff :: Pixel -> Fingerprint -> (Int, String)
-colorDiff p1 (Fingerprint fn p2) = (abs ((pR p1 - pR p2)+(pG p1 - pG p2)+(pB p1 - pB p2)), fn)
+colorDiff p1 (Fingerprint fn p2) = (abs (abs(pR p1 - pR p2)+abs(pG p1 - pG p2)+abs(pB p1 - pB p2)), fn)
 
 -- takes a line from database and returns its information as an image fingerprint
 dbLine2Fingerprint :: String -> Fingerprint
@@ -169,7 +171,7 @@ readPPM (rawImage, fn) = do
     let content = BS.lines rawImage
         [w,h]   = map (read . BS.unpack) $ BS.words (content !! 1)
         pixel   = readInts $ BS.unwords $ drop 3 content
-    xy <- newListArray ((1,1), (h,w)) (str2pix pixel) :: ST s (STArray s (Int,Int) Pixel)
+    !xy <- newListArray ((1,1), (h,w)) (str2pix pixel) :: ST s (STArray s (Int,Int) Pixel)
     return PPMImage {
            ppmWidth  = w
          , ppmHeight = h
@@ -196,9 +198,12 @@ medianColor image = do
 -- Might be possible to merge these two later on
 medianColorSub :: (SubImage s) -> ST s Pixel
 medianColorSub image = do
-  let coords = [(x,y) | y <- [1..subHeight image], x <- [1..subWidth image]]
-  listOfPixel <- mapM (get image) coords
-  let red =  sum (map pR listOfPixel) `div` ((subWidth image) * (subHeight image))
-  let green =  sum (map pG listOfPixel) `div` ((subWidth image) * (subHeight image))
-  let blue =  sum (map pB listOfPixel) `div` ((subWidth image) * (subHeight image))
+  let !coords = [(x,y) | y <- [1,10..subHeight image], x <- [1,10..subWidth image]]
+  !listOfPixel <- mapM (get image) coords
+  --let !red =  sum (map pR listOfPixel) `div` ((subWidth image) * (subHeight image))
+  --let !green =  sum (map pG listOfPixel) `div` ((subWidth image) * (subHeight image))
+  --let !blue =  sum (map pB listOfPixel) `div` ((subWidth image) * (subHeight image))
+  let !red =  sum (map pR listOfPixel) `div` (length coords)
+  let !green =  sum (map pG listOfPixel) `div` (length coords)
+  let !blue =  sum (map pB listOfPixel) `div` (length coords)
   return $ Pixel red green blue

@@ -13,9 +13,6 @@ import Data.Array.ST
 import Debug.Trace
 import qualified Data.ByteString.Lazy.Char8 as BS
 
-import Data.Time
---import Data.Time.Clock.Posix
-
 import Types
 
 main :: IO ()
@@ -107,17 +104,6 @@ analyse (path:xs) = do
   mapM (analyseImage "DB.txt") filesWithPPMSuffix
   print "Fertig"
 
-
--- Time a pure function. A should reduce to a single value, instead seq
--- won't work correctly.
-pureTime ::(Show a) => a -> IO (Double, a)
-pureTime action = do
-    d1 <- getCurrentTime
-    let a = action
-    print a
-    d2 <- a `seq` getCurrentTime
-    return (read . init $ show (diffUTCTime d2 d1), a)
-
 -- generates a mosaic using the given filename as reference
 generate :: [String] -> IO ()
 generate (fn:xs) = do
@@ -125,13 +111,12 @@ generate (fn:xs) = do
   db <- readFile "DB.txt"
   let fingerprints = map dbLine2Fingerprint (lines db)
   rawImage <- BS.readFile fn
-  (t1,originalImg) <- pureTime $ runST $ do 
+  let originalImg = runST $ do 
                  image <- readPPM (rawImage, fn)
-                 tiles <- tileImage image 100 100
+                 tiles <- tileImage image 10 10
                  subMedians <- mapM medianColorSub tiles
                  return $ subMedians
-  --print originalImg
-  print t1
+  print originalImg
   
   let bestImageNames = map (findMatch fingerprints) originalImg
   rawTileFiles <- mapM BS.readFile bestImageNames
@@ -215,6 +200,9 @@ medianColorSub :: (SubImage s) -> ST s Pixel
 medianColorSub image = do
   let !coords = [(x,y) | y <- [1,10..subHeight image], x <- [1,10..subWidth image]]
   !listOfPixel <- mapM (get image) coords
+  --let !red =  sum (map pR listOfPixel) `div` ((subWidth image) * (subHeight image))
+  --let !green =  sum (map pG listOfPixel) `div` ((subWidth image) * (subHeight image))
+  --let !blue =  sum (map pB listOfPixel) `div` ((subWidth image) * (subHeight image))
   let !red =  sum (map pR listOfPixel) `div` (length coords)
   let !green =  sum (map pG listOfPixel) `div` (length coords)
   let !blue =  sum (map pB listOfPixel) `div` (length coords)

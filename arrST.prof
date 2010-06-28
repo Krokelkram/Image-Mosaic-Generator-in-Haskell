@@ -1,0 +1,39 @@
+	Mon Jun 28 15:25 2010 Time and Allocation Profiling Report  (Final)
+
+	   arrST +RTS -sstderr -k50M -p -hc -RTS
+
+	total time  =        3.94 secs   (197 ticks @ 20 ms)
+	total alloc = 1,783,457,872 bytes  (excludes profiling overheads)
+
+COST CENTRE                    MODULE               %time %alloc
+
+writePPM                       Main                  98.0   19.3
+show_av0                       Types                  2.0   71.5
+main                           Main                   0.0    9.2
+
+
+                                                                                               individual    inherited
+COST CENTRE              MODULE                                               no.    entries  %time %alloc   %time %alloc
+
+MAIN                     MAIN                                                   1           0   0.0    0.0   100.0  100.0
+ main                    Main                                                 264           1   0.0    0.0   100.0   90.8
+  writePPM               Main                                                 265           3  98.0   19.3   100.0   90.8
+   show_av0              Types                                                271     1000000   2.0   71.5     2.0   71.5
+ CAF:main22              Main                                                 258           1   0.0    0.0     0.0    0.0
+  writePPM               Main                                                 267           0   0.0    0.0     0.0    0.0
+ CAF:main21              Main                                                 257           1   0.0    0.0     0.0    0.0
+  writePPM               Main                                                 268           0   0.0    0.0     0.0    0.0
+ CAF:main5               Main                                                 256           1   0.0    0.0     0.0    0.0
+ CAF:main6               Main                                                 255           1   0.0    0.0     0.0    9.2
+  main                   Main                                                 270           1   0.0    9.2     0.0    9.2
+ CAF:main2               Main                                                 254           1   0.0    0.0     0.0    0.0
+  main                   Main                                                 266           0   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.Handle.FD                                     191           2   0.0    0.0     0.0    0.0
+ CAF                     System.Posix.Internals                               190           7   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.FD                                            175           5   0.0    0.0     0.0    0.0
+ CAF                     GHC.Conc                                             174           1   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.Handle.Internals                              165           1   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.Encoding.Iconv                                159           6   0.0    0.0     0.0    0.0
+ CAF:$fShowFingerprint7  Types                                                152           1   0.0    0.0     0.0    0.0
+  show_av0               Types                                                272           0   0.0    0.0     0.0    0.0
+ CAF                     Debug.Trace                                          134           1   0.0    0.0     0.0    0.0

@@ -1,0 +1,48 @@
+	Mon Jun 28 15:26 2010 Time and Allocation Profiling Report  (Final)
+
+	   arrSTfreeze +RTS -sstderr -k50M -p -hc -RTS
+
+	total time  =        0.20 secs   (10 ticks @ 20 ms)
+	total alloc = 231,172,068 bytes  (excludes profiling overheads)
+
+COST CENTRE                    MODULE               %time %alloc
+
+main                           Main                 100.0  100.0
+
+
+                                                                                               individual    inherited
+COST CENTRE              MODULE                                               no.    entries  %time %alloc   %time %alloc
+
+MAIN                     MAIN                                                   1           0   0.0    0.0   100.0  100.0
+ main                    Main                                                 282           1   0.0    0.0     0.0    0.0
+  writePPM               Main                                                 283           3   0.0    0.0     0.0    0.0
+ CAF:main5               Main                                                 276           1   0.0    0.0     0.0    0.0
+ CAF:main14              Main                                                 275           1   0.0    0.0     0.0    0.0
+  writePPM               Main                                                 285           0   0.0    0.0     0.0    0.0
+ CAF:main13              Main                                                 274           1   0.0    0.0     0.0    0.0
+  writePPM               Main                                                 286           0   0.0    0.0     0.0    0.0
+ CAF:main6               Main                                                 273           1   0.0    0.0     0.0    0.0
+ CAF:main7               Main                                                 272           1   0.0    0.0     0.0    0.0
+  main                   Main                                                 289           0   0.0    0.0     0.0    0.0
+ CAF:main10              Main                                                 271           1   0.0    0.0    90.0   75.7
+  main                   Main                                                 290           0  90.0   75.7    90.0   75.7
+ CAF:main11              Main                                                 270           1   0.0    0.0     0.0    1.7
+  main                   Main                                                 291           0   0.0    1.7     0.0    1.7
+ CAF:lvl10_r4fn          Main                                                 266           1   0.0    0.0    10.0   22.5
+  main                   Main                                                 292           0  10.0   22.5    10.0   22.5
+ CAF:lvl5_r4fb           Main                                                 265           1   0.0    0.0     0.0    0.0
+  main                   Main                                                 294           0   0.0    0.0     0.0    0.0
+ CAF:lvl2_r4f5           Main                                                 264           1   0.0    0.0     0.0    0.0
+  main                   Main                                                 293           0   0.0    0.0     0.0    0.0
+ CAF:main2               Main                                                 263           1   0.0    0.0     0.0    0.0
+  main                   Main                                                 284           0   0.0    0.0     0.0    0.0
+ CAF                     Data.Typeable                                        261           1   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.Exception                                     255           3   0.0    0.0     0.0    0.0
+ CAF                     Data.HashTable                                       202           2   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.Handle.FD                                     200           2   0.0    0.0     0.0    0.0
+ CAF                     System.Posix.Internals                               199           7   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.FD                                            184           5   0.0    0.0     0.0    0.0
+ CAF                     GHC.Conc                                             183           1   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.Handle.Internals                              174           1   0.0    0.0     0.0    0.0
+ CAF                     GHC.IO.Encoding.Iconv                                168           6   0.0    0.0     0.0    0.0
+ CAF                     Debug.Trace                                          143           1   0.0    0.0     0.0    0.0

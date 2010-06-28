@@ -4,6 +4,7 @@ module Main where
 import Text.Printf
 import System.Environment
 import System.Directory
+import System.IO
 import Data.List
 import Data.Char
 import Control.Parallel
@@ -14,6 +15,7 @@ import Debug.Trace
 import qualified Data.ByteString.Lazy.Char8 as BS
 
 import qualified Data.Foldable as DF
+import Control.Parallel.Strategies (rnf)
 
 import Data.Time
 
@@ -24,7 +26,7 @@ main = do
   args <- getArgs
   case head args of
     "analyse" -> analyse $ tail args
-    "generate" -> generate $ tail args
+    "generate" -> generate' $ tail args
     
                            
 
@@ -61,7 +63,7 @@ rescale w h (rawPixel, fname) = do
   img <- readPPM (rawPixel, fname)
   tiles <- tileImage img w h
   pixels <- mapM medianColorSub tiles
-  pxArr <- newListArray ((1,1), (w,h)) pixels :: ST s (STArray s (Int,Int) Pixel)
+  !pxArr <- newListArray ((1,1), (w,h)) pixels :: ST s (STArray s (Int,Int) Pixel)
   let finalImage = PPMImage pxArr w h "final"
   trace "R" $ return finalImage
 
@@ -75,6 +77,16 @@ pasteImage finalImg (tileImg', (offX, offY)) = do
       set finalImg (x+offX,y+offY) pixel
   return ()
 
+pasteImage' :: PPMImage s -> [(BS.ByteString, (Int,Int))] -> ST s ()
+pasteImage' _ [] = return ()
+pasteImage' finalImg ((tileImg', (offX, offY)):xs) = do
+  tileImg <- rescale 80 80 (tileImg', "nix")
+  trace "P" $ forM_ [1..ppmWidth tileImg] $ \x -> do
+    forM_ [1..ppmHeight tileImg] $ \y -> do
+      !pixel <- get tileImg (x,y)
+      set finalImg (x+offX,y+offY) pixel
+  pasteImage' finalImg xs
+
 -- merges all given images into one big image
 -- needs the size of the small images and the number of rows and columns
 merge :: [BS.ByteString] -> (Int,Int) -> (Int,Int) -> ST s (PPMImage s)
@@ -83,7 +95,8 @@ merge tileImages (tileW, tileH) (partsX,partsY) = do
   let finalImage = PPMImage pxs (partsX * tileW) (partsY * tileH) "bla"
   let mergeOffset = [(x,y) | y <- [0,tileH..((partsY * tileH)-1)], x <- [0, tileW..((partsX * tileW)-1)]]
   let tileOffsetPairs = zip tileImages mergeOffset
-  mapM_ (pasteImage finalImage) tileOffsetPairs
+  --mapM_ (pasteImage finalImage) tileOffsetPairs
+  pasteImage' finalImage tileOffsetPairs
   return $ finalImage
 
 -- analyses a folder by opening the files in it and writing their stats to file
@@ -106,6 +119,53 @@ pureTime action = do
     d2 <- a `seq` getCurrentTime
     return (read . init $ show (diffUTCTime d2 d1), a)
 
+
+generate' :: [String] ->IO ()
+generate' (fn:_) = do
+  putStrLn "Bild wir generiert..."
+  db <- readFile "DB.txt"
+  let fingerprints = map dbLine2Fingerprint (lines db)
+  rawImage <- BS.readFile fn
+  (t1,originalImg) <- pureTime $ runST $ do
+                 image <- readPPM (rawImage, fn)
+                 tiles <- tileImage image 10 10
+                 subMedians <- mapM medianColorSub tiles
+                 return $ subMedians
+  print t1
+  let bestImageNames = map (findMatch fingerprints) originalImg
+  print bestImageNames
+  rescImgPxs <- openAndRescale bestImageNames
+  print "bis hierher und nicht weiter"
+  --mapM_ print rescImgPxs
+  putStr $ show $ length rescImgPxs
+  let !falses =  map (\x -> (pR x + pG x + pB x) > 3000) (concat rescImgPxs)
+  print $ map show falses
+  
+
+  --let finalImg = runST $ do 
+  --                  pxs <- newArray ((1,1),(20 * 80, 20 * 80)) (Pixel 0 0 0):: ST s (STArray s (Int,Int) Pixel)
+  --                   return $ PPMImage pxs (20 * 80) (20 * 80) "bla"
+  --putStrLn "DummyLine"
+
+--paste' :: [String] -> IO ()
+--paste' (filename:xs) = do
+
+openAndRescale :: [String] -> IO [[Pixel]]
+openAndRescale [] = return []
+openAndRescale (fn:xs) = do
+  !res <- withFile fn ReadMode $ \h -> do
+                           !file <- BS.hGetContents h
+                           let !res = runST $ do
+                                       !img <- readPPM (file,fn)
+                                       !tiles <- tileImage img 80 80
+                                       !p <- mapM medianColorSub tiles
+                                       return p
+                           putStr $ show $ length res
+                           return res
+  xs' <- openAndRescale xs
+  return $ res : xs'
+
+
 -- generates a mosaic using the given filename as reference
 generate :: [String] -> IO ()
 generate (fn:xs) = do
@@ -115,13 +175,18 @@ generate (fn:xs) = do
   rawImage <- BS.readFile fn
   (t1,originalImg) <- pureTime $ runST $ do
                  image <- readPPM (rawImage, fn)
-                 tiles <- tileImage image 50 50
+                 tiles <- tileImage image 10 10
                  subMedians <- mapM medianColorSub tiles
                  return $ subMedians
   print t1
   
   let bestImageNames = map (findMatch fingerprints) originalImg
-  rawTileFiles <- mapM BS.readFile bestImageNames
+  putStrLn "Hier knallts"
+  rawTileFiles <- mapM (\x -> do
+                          putStr "."
+                          BS.readFile x) bestImageNames
+  --rawTileFiles <- openAll bestImageNames
+  putStrLn "Huhu"
   let finalImg = runST $ do
                      finalImg <- merge rawTileFiles (80,80) (10,10)
                      bla <- getElems $ ppmArray finalImg
@@ -171,7 +236,7 @@ writePPM :: [Pixel] -> (Int,Int) -> String -> IO ()
 writePPM pxs (w,h) fname = do
   putStrLn "Jetzt wird geschrieben"
   writeFile fname $ printf "P3\n%d %d\n255\n" w h
-  appendFile fname (unwords $ map show (pxs))
+  trace "Writing..." $ appendFile fname (unwords $ map show (pxs))
 
 -- Takes a filename and opens it as a ppm image.
 readPPM :: (BS.ByteString, String) -> ST s (PPMImage s)
@@ -180,7 +245,7 @@ readPPM (rawImage, fn) = do
         [w,h] = map (read . BS.unpack) $ BS.words (content !! 1)
         pixel = readInts $ BS.unwords $ drop 3 content
     xy <- newListArray ((1,1), (h,w)) (str2pix pixel) :: ST s (STArray s (Int,Int) Pixel)
-    return PPMImage {
+    length content `seq` return PPMImage {
            ppmWidth = w
          , ppmHeight = h
          , ppmName = fn

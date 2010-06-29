@@ -26,7 +26,7 @@ main = do
   args <- getArgs
   case head args of
     "analyse" -> analyse $ tail args
-    "generate" -> generate' $ tail args
+    "generate" -> generate $ tail args
     
                            
 
@@ -65,7 +65,7 @@ rescale w h (rawPixel, fname) = do
   pixels <- mapM medianColorSub tiles
   !pxArr <- newListArray ((1,1), (w,h)) pixels :: ST s (STArray s (Int,Int) Pixel)
   let finalImage = PPMImage pxArr w h "final"
-  trace "R" $ return finalImage
+  return finalImage
 
 -- pastes a small image into a bigger image at the given position
 pasteImage :: PPMImage s -> (BS.ByteString, (Int,Int)) -> ST s ()
@@ -81,7 +81,7 @@ pasteImage' :: PPMImage s -> [(BS.ByteString, (Int,Int))] -> ST s ()
 pasteImage' _ [] = return ()
 pasteImage' finalImg ((tileImg', (offX, offY)):xs) = do
   tileImg <- rescale 80 80 (tileImg', "nix")
-  trace "P" $ forM_ [1..ppmWidth tileImg] $ \x -> do
+  forM_ [1..ppmWidth tileImg] $ \x -> do
     forM_ [1..ppmHeight tileImg] $ \y -> do
       !pixel <- get tileImg (x,y)
       set finalImg (x+offX,y+offY) pixel
@@ -181,11 +181,9 @@ generate (fn:xs) = do
   print t1
   
   let bestImageNames = map (findMatch fingerprints) originalImg
-  putStrLn "Hier knallts"
   rawTileFiles <- mapM (\x -> do
                           putStr "."
                           BS.readFile x) bestImageNames
-  --rawTileFiles <- openAll bestImageNames
   putStrLn "Huhu"
   let finalImg = runST $ do
                      finalImg <- merge rawTileFiles (80,80) (10,10)

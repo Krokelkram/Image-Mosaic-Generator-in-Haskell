@@ -23,10 +23,7 @@ import Types
 
 main :: IO ()
 main = do
-  args <- getArgs
-  case head args of
-    "analyse" -> analyse $ tail args
-    "generate" -> generate $ tail args
+  generate
     
                            
 
@@ -120,61 +117,17 @@ pureTime action = do
     return (read . init $ show (diffUTCTime d2 d1), a)
 
 
-generate' :: [String] ->IO ()
-generate' (fn:_) = do
-  putStrLn "Bild wir generiert..."
-  db <- readFile "DB.txt"
-  let fingerprints = map dbLine2Fingerprint (lines db)
-  rawImage <- BS.readFile fn
-  (t1,originalImg) <- pureTime $ runST $ do
-                 image <- readPPM (rawImage, fn)
-                 tiles <- tileImage image 10 10
-                 subMedians <- mapM medianColorSub tiles
-                 return $ subMedians
-  print t1
-  let bestImageNames = map (findMatch fingerprints) originalImg
-  print bestImageNames
-  rescImgPxs <- openAndRescale bestImageNames
-  print "bis hierher und nicht weiter"
-  --mapM_ print rescImgPxs
-  putStr $ show $ length rescImgPxs
-  let !falses =  map (\x -> (pR x + pG x + pB x) > 3000) (concat rescImgPxs)
-  print $ map show falses
-  
-
-  --let finalImg = runST $ do 
-  --                  pxs <- newArray ((1,1),(20 * 80, 20 * 80)) (Pixel 0 0 0):: ST s (STArray s (Int,Int) Pixel)
-  --                   return $ PPMImage pxs (20 * 80) (20 * 80) "bla"
-  --putStrLn "DummyLine"
-
---paste' :: [String] -> IO ()
---paste' (filename:xs) = do
-
-openAndRescale :: [String] -> IO [[Pixel]]
-openAndRescale [] = return []
-openAndRescale (fn:xs) = do
-  !res <- withFile fn ReadMode $ \h -> do
-                           !file <- BS.hGetContents h
-                           let !res = runST $ do
-                                       !img <- readPPM (file,fn)
-                                       !tiles <- tileImage img 80 80
-                                       !p <- mapM medianColorSub tiles
-                                       return p
-                           putStr $ show $ length res
-                           return res
-  xs' <- openAndRescale xs
-  return $ res : xs'
 
 
 -- generates a mosaic using the given filename as reference
-generate :: [String] -> IO ()
-generate (fn:xs) = do
+generate :: IO ()
+generate = do
   putStrLn "Image will be generated here..."
   db <- readFile "DB.txt"
   let fingerprints = map dbLine2Fingerprint (lines db)
-  rawImage <- BS.readFile fn
+  rawImage <- BS.readFile "minippm_13.ppm"
   (t1,originalImg) <- pureTime $ runST $ do
-                 image <- readPPM (rawImage, fn)
+                 image <- readPPM (rawImage, "x")
                  tiles <- tileImage image 10 10
                  subMedians <- mapM medianColorSub tiles
                  return $ subMedians

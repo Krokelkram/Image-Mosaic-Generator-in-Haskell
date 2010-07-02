@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FlexibleInstances #-}
 module Types where
 import Text.Printf
-import Control.Monad.ST.Lazy
+import Control.Monad.ST
 import Data.Array.ST
 
 class Image a s where

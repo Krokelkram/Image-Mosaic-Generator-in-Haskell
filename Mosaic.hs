@@ -12,6 +12,7 @@ import Control.Monad
 import Control.Monad.ST
 import Data.Array.ST
 import Debug.Trace
+import Graphics.GD
 import qualified Data.ByteString.Char8 as BS
 
 import qualified Data.Foldable as DF
@@ -147,21 +148,34 @@ generate' (fn:_) = do
   rawImage <- BS.readFile fn
   (t1,originalImg) <- pureTime $ runST $ do
                  image <- readPPM (rawImage, fn)
-                 tiles <- tileImage image 5 5
+                 tiles <- tileImage image 64 64
                  subMedians <- mapM medianColorSub tiles
                  return $ subMedians
   print t1
   let bestImageNames = map (findMatch fingerprints) originalImg
   print bestImageNames
-  rescImgPxs <- openAndRescale bestImageNames
-  putStr $ show $ length rescImgPxs
-  let pxs = runST $ do
-                     res <- mergeNew rescImgPxs (80,80) (5,5)
-                     elems <- getElems $ ppmArray res
-                     return elems
-  --let pxs = concat $ buildMosaic rescImgPxs 80 10
-  (length rescImgPxs) `seq` writePPM (pxs) (400,400) "badtest.ppm"
+
+  resImage <- newImage (80 * 64, 80 * 64)
+  let offsets   = [(x,y) | y <- [0,80..(80*64)-1], x <- [0,80..(80*64)-1]]
+      imgAndOff = zip bestImageNames offsets
+  mapM_ (insertImage resImage) imgAndOff
+  saveJpegFile 95 "heureka.jpg" resImage
+  
+ -- rescImgPxs <- openAndRescale bestImageNames
+ -- putStr $ show $ length rescImgPxs
+ -- let pxs = runST $ do
+ --                    res <- mergeNew rescImgPxs (80,80) (5,5)
+ --                    elems <- getElems $ ppmArray res
+ --                    return elems
+ -- (length rescImgPxs) `seq` writePPM (pxs) (400,400) "badtest.ppm"
   print "ENDE"
+
+insertImage :: Graphics.GD.Image -> (String, (Int,Int)) -> IO ()
+insertImage resImage (fn, offset) = do
+  let jpgname = trace (printf "Inserts: %s an %s" fn (show offset)) $ printf "%s.JPG" (takeWhile (/= '.') fn)
+  withImage (loadJpegFile jpgname) $ do (\x -> do
+                                           imgSize <- imageSize x
+                                           copyRegionScaled (0,0) imgSize x offset (80,80) resImage)
 
 buildMosaic :: [[Pixel]] -> Int -> Int -> [[Pixel]]
 buildMosaic [] _ _ = []

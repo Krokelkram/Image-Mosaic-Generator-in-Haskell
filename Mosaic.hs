@@ -35,10 +35,20 @@ main = do
 analyseImage :: String -> String ->IO ()
 analyseImage dbname filename = do
   rawImage <- BS.readFile filename
+  putStrLn $ printf "Starte Analyse von: %s" filename
   appendFile dbname $ runST $ do
-   image <- readPPM (rawImage, filename)
-   statStr <- getStatString image
-   return statStr
+   image <- trace "Einlesen" $ readPPM (rawImage, filename)
+   statStr <- trace "medString berechnen" $ getStatString image
+   return $ trace statStr $ statStr
+  putStrLn $ printf "%s wurde analysiert" filename
+  saveResizedCopy filename
+
+saveResizedCopy :: String -> IO ()
+saveResizedCopy fn = do
+  let jpgname = trace (printf "Resize to mini: %s" fn) $ printf "%s.JPG" (takeWhile (/= '.') fn)
+  withImage (loadJpegFile jpgname) $ do (\x -> do
+                                           resized <- resizeImage 80 60 x
+                                           saveJpegFile 95 (printf "%s_small.JPG" (takeWhile (/= '.') fn)) resized)
    
 
 -- takes a ppmImage that is split horizontally and vertically
@@ -122,6 +132,7 @@ pasteImageNew finalImg ((tileImg, (offX, offY)):xs) (w,h) = do
 -- analyses a folder by opening the files in it and writing their stats to file
 analyse :: [String] -> IO ()
 analyse (path:xs) = do
+  putStrLn "Starte Analyse"
   dirContent <- getDirectoryContents path
   writeFile "DB.txt" ""
   let filesWithPPMSuffix = (filter (isSuffixOf ".ppm") dirContent)
@@ -155,11 +166,11 @@ generate' (fn:_) = do
   let bestImageNames = map (findMatch fingerprints) originalImg
   print bestImageNames
 
-  resImage <- newImage (80 * 64, 80 * 64)
-  let offsets   = [(x,y) | y <- [0,80..(80*64)-1], x <- [0,80..(80*64)-1]]
+  resImage <- newImage (80 * 64, 60 * 64)
+  let offsets   = [(x,y) | y <- [0,60..(60*64)-1], x <- [0,80..(80*64)-1]]
       imgAndOff = zip bestImageNames offsets
   mapM_ (insertImage resImage) imgAndOff
-  saveJpegFile 95 "heureka.jpg" resImage
+  saveJpegFile 95 "heureka2.jpg" resImage
   
  -- rescImgPxs <- openAndRescale bestImageNames
  -- putStr $ show $ length rescImgPxs
@@ -172,10 +183,11 @@ generate' (fn:_) = do
 
 insertImage :: Graphics.GD.Image -> (String, (Int,Int)) -> IO ()
 insertImage resImage (fn, offset) = do
-  let jpgname = trace (printf "Inserts: %s an %s" fn (show offset)) $ printf "%s.JPG" (takeWhile (/= '.') fn)
+  let jpgname = trace (printf "Inserts: %s an %s" fn (show offset)) $ printf "%s_small.JPG" (takeWhile (/= '.') fn)
   withImage (loadJpegFile jpgname) $ do (\x -> do
                                            imgSize <- imageSize x
-                                           copyRegionScaled (0,0) imgSize x offset (80,80) resImage)
+                                           copyRegion (0,0) (80,60) x offset resImage)
+                                           --copyRegionScaled (0,0) imgSize x offset (80,80) resImage)
 
 buildMosaic :: [[Pixel]] -> Int -> Int -> [[Pixel]]
 buildMosaic [] _ _ = []
@@ -256,7 +268,7 @@ dbLine2Fingerprint ln = Fingerprint fn (Pixel (read r) (read g) (read b))
 -- takes a ppmImage and returns its statistics as a string
 getStatString :: (PPMImage s) -> ST s String
 getStatString img = do
-  medCol <- medianColor img
+  medCol <- trace "call: medianColor" $ medianColor img
   return $ printf "%s %s\n" (ppmName img) (show medCol)
 
 -- Takes a list of strings (representing lines of a ppm file) and turns them
@@ -293,11 +305,12 @@ readPPM (rawImage, fn) = do
 -- Still a bit clumsy because of getElems
 medianColor :: (PPMImage s) -> ST s Pixel
 medianColor image = do
-    listOfPixel <- getElems $ ppmArray image
-    let red = sum (map pR listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
-    let green = sum (map pG listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
-    let blue = sum (map pB listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
-    return $ Pixel red green blue
+    !listOfPixel <- trace "getElems" $ getElems $ ppmArray image
+    let !red = trace "RedSum" $ sum (map pR listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
+    let !green = sum (map pG listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
+    let !blue = sum (map pB listOfPixel) `div` ((ppmWidth image) * (ppmHeight image))
+    let !resPixel = Pixel red green blue
+    return resPixel
 
 
 -- same as medianColor, but for SubImages.

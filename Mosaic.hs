@@ -7,12 +7,13 @@ import System.Directory
 import System.IO
 import Data.List
 import Data.Char
+import Data.Bits
 import Control.Parallel
 import Control.Monad
 import Control.Monad.ST
 import Data.Array.ST
 import Debug.Trace
-import Graphics.GD
+import Graphics.GD.ByteString
 import qualified Data.ByteString.Char8 as BS
 
 import qualified Data.Foldable as DF
@@ -34,21 +35,47 @@ main = do
 -- takes a filename and appends its statistics to a text file
 analyseImage :: String -> String ->IO ()
 analyseImage dbname filename = do
-  rawImage <- BS.readFile filename
+  --rawImage <- BS.readFile filename
   putStrLn $ printf "Starte Analyse von: %s" filename
-  appendFile dbname $ runST $ do
-   image <- trace "Einlesen" $ readPPM (rawImage, filename)
-   statStr <- trace "medString berechnen" $ getStatString image
-   return $ trace statStr $ statStr
-  putStrLn $ printf "%s wurde analysiert" filename
-  saveResizedCopy filename
+  --appendFile dbname $ runST $ do
+  -- image <- trace "Einlesen" $ readPPM (rawImage, filename)
+  -- statStr <- trace "medString berechnen" $ getStatString image
+  -- return $ trace statStr $ statStr
 
-saveResizedCopy :: String -> IO ()
+  avg <- saveResizedCopy filename
+  appendFile dbname $ printf "%s %s\n" filename (show avg)
+  putStrLn $ printf "%s wurde analysiert" filename
+  
+
+saveResizedCopy :: String -> IO Pixel
 saveResizedCopy fn = do
-  let jpgname = trace (printf "Resize to mini: %s" fn) $ printf "%s.JPG" (takeWhile (/= '.') fn)
-  withImage (loadJpegFile jpgname) $ do (\x -> do
-                                           resized <- resizeImage 80 60 x
-                                           saveJpegFile 95 (printf "%s_small.JPG" (takeWhile (/= '.') fn)) resized)
+  --let jpgname = trace (printf "Resize to mini: %s" fn) $ printf "%s.JPG" (takeWhile (/= '.') fn)
+  let jpgname = fn
+  avg <- withImage (loadJpegFile jpgname) $ do (\x -> do
+                                                  resized <- resizeImage 80 60 x
+                                                  avg <- getJPGavg resized
+                                                  print avg
+                                                  saveJpegFile 95 (printf "%s_small.JPG" (takeWhile (/= '.') fn)) resized
+                                                  return avg)
+  return avg
+                                          
+  
+
+getJPGavg :: Graphics.GD.ByteString.Image -> IO Pixel
+getJPGavg image = do
+  (w,h) <- imageSize image
+  let coords = [(x,y) | y <- [0,5..h-1], x <- [0,5..w-1]]
+  pxs <- mapM (\x -> do 
+                 colorC <- getPixel x image
+                 let color = fromIntegral colorC :: Int
+                 --trace (printf"%d %d %d (%d)" ((shiftR color 16) .&. 255) ((shiftR color 8) .&. 255) ( color .&. 255)  color) $ return $fromIntegral color) coords
+                 return $ Pixel ((shiftR color 16) .&. 255) ((shiftR color 8) .&. 255) ( color .&. 255)) coords
+  --let avg = sum pxs `div` length coords
+  let !red = sum (map pR pxs) `div` (length coords)
+  let !green = sum (map pG pxs) `div` (length coords)
+  let !blue = sum (map pB pxs) `div` (length coords)
+  let avgPx = Pixel red green blue
+  return avgPx
    
 
 -- takes a ppmImage that is split horizontally and vertically
@@ -135,7 +162,7 @@ analyse (path:xs) = do
   putStrLn "Starte Analyse"
   dirContent <- getDirectoryContents path
   writeFile "DB.txt" ""
-  let filesWithPPMSuffix = (filter (isSuffixOf ".ppm") dirContent)
+  let filesWithPPMSuffix = (filter ((isSuffixOf ".JPG")) dirContent)
   mapM (analyseImage "DB.txt") filesWithPPMSuffix
   print "Fertig"
 
@@ -153,16 +180,37 @@ pureTime action = do
 
 generate' :: [String] ->IO ()
 generate' (fn:_) = do
-  putStrLn "Bild wir generiert..."
+  putStrLn "Bild wird generiert..."
   db <- readFile "DB.txt"
   let fingerprints = map dbLine2Fingerprint (lines db)
-  rawImage <- BS.readFile fn
-  (t1,originalImg) <- pureTime $ runST $ do
-                 image <- readPPM (rawImage, fn)
-                 tiles <- tileImage image 64 64
-                 subMedians <- mapM medianColorSub tiles
-                 return $ subMedians
-  print t1
+  --rawImage <- BS.readFile fn
+  --(t1,originalImg) <- pureTime $ runST $ do
+  --               image <- readPPM (rawImage, fn)
+  --               tiles <- tileImage image 64 64
+  --               subMedians <- mapM medianColorSub tiles
+  --               return $ subMedians
+  --print t1
+
+
+
+
+  avg <- withImage (loadJpegFile fn) $ do (\x -> do
+                                             (w,h) <- imageSize fn
+                                             let tileW = w `div` 64
+                                             let tileH = h `div` 64
+                                             let points = [(x,y) | y <- [0,tileH..h-1] , x <- [0,(w/64)..w-1] ]
+                                             mapM (\x -> do
+                                                     new <- newImage ()
+                                                     copyRegion x ) points
+                                             --resized <- resizeImage 80 60 x
+                                             avg <- getJPGavg resized
+                                             print avg
+                                             saveJpegFile 95 (printf "%s_small.JPG" (takeWhile (/= '.') fn)) resized
+                                             return avg)
+
+
+
+
   let bestImageNames = map (findMatch fingerprints) originalImg
   print bestImageNames
 
@@ -170,7 +218,7 @@ generate' (fn:_) = do
   let offsets   = [(x,y) | y <- [0,60..(60*64)-1], x <- [0,80..(80*64)-1]]
       imgAndOff = zip bestImageNames offsets
   mapM_ (insertImage resImage) imgAndOff
-  saveJpegFile 95 "heureka2.jpg" resImage
+  saveJpegFile 95 "heureka3.jpg" resImage
   
  -- rescImgPxs <- openAndRescale bestImageNames
  -- putStr $ show $ length rescImgPxs
@@ -181,7 +229,7 @@ generate' (fn:_) = do
  -- (length rescImgPxs) `seq` writePPM (pxs) (400,400) "badtest.ppm"
   print "ENDE"
 
-insertImage :: Graphics.GD.Image -> (String, (Int,Int)) -> IO ()
+insertImage :: Graphics.GD.ByteString.Image -> (String, (Int,Int)) -> IO ()
 insertImage resImage (fn, offset) = do
   let jpgname = trace (printf "Inserts: %s an %s" fn (show offset)) $ printf "%s_small.JPG" (takeWhile (/= '.') fn)
   withImage (loadJpegFile jpgname) $ do (\x -> do
@@ -282,6 +330,7 @@ writePPM pxs (w,h) fname = do
   putStrLn "Jetzt wird geschrieben"
   writeFile fname $ printf "P3\n%d %d\n255\n" w h
   trace "Writing..." $ appendFile fname (unwords $ map show (pxs))
+
 
 -- Takes a filename and opens it as a ppm image.
 readPPM :: (BS.ByteString, String) -> ST s (PPMImage s)

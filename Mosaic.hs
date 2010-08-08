@@ -2,7 +2,6 @@
 {-# LANGUAGE BangPatterns #-}
 module Main where
 import Text.Printf
-import System.Environment
 import System.Directory
 import System.IO
 import Data.List
@@ -10,25 +9,19 @@ import Data.Char
 import Data.Bits
 import Control.Parallel
 import Control.Monad
-import Control.Monad.ST
-import Data.Array.ST
 import Debug.Trace
+import System.Console.CmdArgs
 import Graphics.GD.ByteString
-import qualified Data.ByteString.Char8 as BS
-
-import qualified Data.Foldable as DF
-import Control.Parallel.Strategies (rnf)
-
 import Data.Time
-
 import Types
+import Menu
 
 main :: IO ()
 main = do
-  args <- getArgs
-  case head args of
-    "analyse" -> analyse $ tail args
-    "generate" -> generate' $ tail args
+  modus <- cmdArgs "MosaicMaker v0.9" modes
+  case modus of
+    (Analyse source) -> trace (printf "Analyse path: %s" source) $ analyse source
+    (Generate f _) -> trace (printf "Generate mosaic of: %s" f) $ generate' f
     
 
 -- takes a filename and appends its statistics to a text file
@@ -50,8 +43,6 @@ saveResizedCopy fn = do
                                                   return avg)
   return avg
                                           
-  
-
 getJPGavg :: Graphics.GD.ByteString.Image -> IO Pixel
 getJPGavg image = do
   (w,h) <- imageSize image
@@ -68,10 +59,11 @@ getJPGavg image = do
    
 
 -- analyses a folder by opening the files in it and writing their stats to file
-analyse :: [String] -> IO ()
-analyse (path:xs) = do
+analyse :: String -> IO ()
+analyse path = do
   putStrLn "Starte Analyse"
   dirContent <- getDirectoryContents path
+  print dirContent
   writeFile "DB.txt" ""
   let filesWithPPMSuffix = (filter ((isSuffixOf ".JPG")) dirContent)
   mapM (analyseImage "DB.txt") filesWithPPMSuffix
@@ -84,13 +76,12 @@ pureTime ::(Show a) => [a] -> IO (Double, [a])
 pureTime action = do
     d1 <- getCurrentTime
     let a = action
-    -- print a
     d2 <- (length a) `seq` getCurrentTime
     return (read . init $ show (diffUTCTime d2 d1), a)
 
 
-generate' :: [String] ->IO ()
-generate' (fn:_) = do
+generate' :: String ->IO ()
+generate' fn = do
   putStrLn "Bild wird generiert..."
   db <- readFile "DB.txt"
   let fingerprints = map dbLine2Fingerprint (lines db)
@@ -120,7 +111,6 @@ insertImage :: Graphics.GD.ByteString.Image -> (String, (Int,Int)) -> IO ()
 insertImage resImage (fn, offset) = do
   let jpgname = trace (printf "Inserts: %s an %s" fn (show offset)) $ printf "%s_small.JPG" (takeWhile (/= '.') fn)
   withImage (loadJpegFile jpgname) $ do (\x -> do
-                                           imgSize <- imageSize x
                                            copyRegion (0,0) (80,60) x offset resImage)
 
 -- Time an IO action
@@ -138,6 +128,7 @@ findMatch fps pix = snd $ minDiff (map (colorDiff pix) fps)
           minDiff (x1:x2:xs) = if (fst x1) < (fst x2)
                                then minDiff $ x1:xs
                                else minDiff $ x2:xs
+          minDiff [] = error "Invalid fingerprint"
           
 
 -- returns a tuple of color difference and filename

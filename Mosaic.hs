@@ -20,8 +20,8 @@ main :: IO ()
 main = do
   modus <- cmdArgs "MosaicMaker v0.9" modes
   case modus of
-    (Analyse source) -> trace (printf "Analyse path: %s" source) $ analyse source
-    (Generate f _) -> trace (printf "Generate mosaic of: %s" f) $ generate' f
+    (Analyse source db) -> trace (printf "Analyse path: %s" source) $ analyse source db
+    (Generate f o db' hTiles vTiles) -> trace (printf "Generate mosaic of: %s" f) $ generate f o db' hTiles vTiles
     
 
 -- takes a filename and appends its statistics to a text file
@@ -59,14 +59,15 @@ getJPGavg image = do
    
 
 -- analyses a folder by opening the files in it and writing their stats to file
-analyse :: String -> IO ()
-analyse path = do
+analyse :: String -> String -> IO ()
+analyse path dbFolder = do
   putStrLn "Starte Analyse"
   dirContent <- getDirectoryContents path
-  print dirContent
+  let contentWithFullPath = map (\x -> path ++ "/" ++ x) dirContent
+  print contentWithFullPath
   writeFile "DB.txt" ""
-  let filesWithPPMSuffix = (filter ((isSuffixOf ".JPG")) dirContent)
-  mapM (analyseImage "DB.txt") filesWithPPMSuffix
+  let filesWithPPMSuffix = (filter ((isSuffixOf ".JPG")) contentWithFullPath)
+  mapM (analyseImage $ dbFolder ++ "/" ++ "DB.txt") filesWithPPMSuffix
   print "Fertig"
 
 
@@ -80,17 +81,18 @@ pureTime action = do
     return (read . init $ show (diffUTCTime d2 d1), a)
 
 
-generate' :: String ->IO ()
-generate' fn = do
+generate :: String -> String -> String -> Int -> Int ->IO ()
+generate fn outFn dbFolder hTiles vTiles = do
   putStrLn "Bild wird generiert..."
-  db <- readFile "DB.txt"
+  db <- readFile (dbFolder ++ "/" ++ "DB.txt")
   let fingerprints = map dbLine2Fingerprint (lines db)
   
   img <- loadJpegFile fn
   (w,h) <- imageSize img
-  let tileW = w `div` 128
-  let tileH = h `div` 128
-  let points = [(x,y) | y <- [0,tileH..h-1] , x <- [0,tileW..w-1] ]
+  let tileW = w `div` hTiles
+  let tileH = h `div` vTiles
+  let points = [(x,y) | y <- [0,tileH..h-tileH] , x <- [0,tileW..w-tileH] ]
+  putStrLn $ printf "Punkte: %d" (length points)
   tiles <- mapM (\p -> do
                    new <- newImage (tileW,tileH)
                    copyRegion p (tileW,tileH) img (0,0) new
@@ -99,12 +101,16 @@ generate' fn = do
 
   let bestImageNames = map (findMatch fingerprints) avgs
   print bestImageNames
+  putStrLn $ printf "Beste Bilder: %d" (length bestImageNames)
 
-  resImage <- newImage (80 * 128, 60 * 128)
-  let offsets   = [(x,y) | y <- [0,60..(60*128)-1], x <- [0,80..(80*128)-1]]
+  resImage <- newImage (80 * hTiles, 60 * vTiles)
+  let offsets   = [(x,y) | y <- [0,60..(60*vTiles)-1], x <- [0,80..(80*hTiles)-1]]
       imgAndOff = zip bestImageNames offsets
+  --print imgAndOff
+  putStrLn $ printf "Offsets: %d" (length offsets)
+  putStrLn $ printf "ImgAndOffsets: %d" (length imgAndOff)
   mapM_ (insertImage resImage) imgAndOff
-  saveJpegFile 95 "heureka3.jpg" resImage
+  saveJpegFile 95 outFn resImage
   print "ENDE"
 
 insertImage :: Graphics.GD.ByteString.Image -> (String, (Int,Int)) -> IO ()

@@ -92,34 +92,45 @@ pureTime action = do
 generate :: String -> String -> String -> Int -> Int ->IO ()
 generate fn outFn dbFolder hTiles vTiles = do
   db <- readFile (dbFolder ++ "/" ++ "DB.txt")
+    -- loads the file into a list of fingerprints
   let fingerprints = map dbLine2Fingerprint (lines db)
-  
   img <- loadJpegFile fn
   (w,h) <- imageSize img
+    -- calculate the dimensions (width and height) of the tiles
   let tileW  = w `div` hTiles
       tileH  = h `div` vTiles
+        -- calculate the upper left corner of every tile
       points = [(x,y) | y <- [0,tileH..h-tileH] , x <- [0,tileW..w-tileH] ]
+    -- copy each tile into a new image type and return them in a list
   tiles <- mapM (\p -> do
                    new <- newImage (tileW,tileH)
                    copyRegion p (tileW,tileH) img (0,0) new
                    return new) points
+    -- calculate the average color of every tile
   avgs <- mapM getJPGavg tiles
-
+    -- for each tile find the best image that fits its average color
   let bestImageNames = map (findMatch fingerprints) avgs
-
+    -- create a new empty image in the size of the resulting mosaic
   resImage <- newImage (80 * hTiles, 60 * vTiles)
+    -- calculate the upper left corners according to the result image
   let offsets   = [(x,y) | y <- [0,60..(60*vTiles)-1], x <- [0,80..(80*hTiles)-1]]
       imgAndOff = zip bestImageNames offsets
-  mapM_ (insertImage resImage) imgAndOff
+    -- insert every image at the position determined by its offset
+  mapM_ (insertImage resImage dbFolder) imgAndOff
+    -- save the image to file
   saveJpegFile 95 outFn resImage
   
-
-insertImage :: Graphics.GD.ByteString.Image -> (String, (Int,Int)) -> IO ()
-insertImage resImage (fn, offset) = do
+-- takes a target image and a tuple of a filename and offset
+-- copies the given image file into the target image, position determined by offset
+insertImage :: Graphics.GD.ByteString.Image -> String -> (String, (Int,Int)) -> IO ()
+insertImage resImage folder (fn, offset) = do
   isVerbose <- isLoud
   when isVerbose $ putStrLn $ printf "Inserts: %s an %s" fn (show offset)
-  let jpgname = printf "%s_small.JPG" (takeWhile (/= '.') fn)
+  let jpgname = printf "%s/%s_small.JPG" folder (filenameOnly fn)
   withImage (loadJpegFile jpgname) (\x -> copyRegion (0,0) (80,60) x offset resImage)
+      where filenameOnly path = removeExtension $ removeFolders path
+            removeFolders path = reverse $ takeWhile (/='/') (reverse path)
+            removeExtension = takeWhile (/= '.')
 
 -- Time an IO action
 time :: IO a -> IO (Double, a)

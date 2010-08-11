@@ -38,7 +38,7 @@ analyseImage dbFolder filename = do
   putStrLn "OK"
 
 noSpace :: String -> String
-noSpace str = map (\x -> if x==' ' then '#' else x) str
+noSpace str = map (\x -> if x==' ' then '_' else x) str
   
 -- opens the image on the path in first string and saves a smaller copy of it in
 -- the folder that is specified with the second string

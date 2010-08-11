@@ -34,21 +34,30 @@ analyseImage :: String -> String ->IO ()
 analyseImage dbFolder filename = do
   putStrLn $ printf "Analysing %s" filename
   avg <- saveResizedCopy filename dbFolder
-  appendFile (dbFolder ++ "/" ++ "DB.txt") $ printf "%s %s\n" filename (show avg)
+  appendFile (dbFolder ++ "/" ++ "DB.txt") $ printf "%s %s\n" (noSpace filename) (show avg)
   putStrLn "OK"
+
+noSpace :: String -> String
+noSpace str = map (\x -> if x==' ' then '#' else x) str
   
+-- opens the image on the path in first string and saves a smaller copy of it in
+-- the folder that is specified with the second string
+-- calculating the average color while doing so (which is then returned as a pixel)
 saveResizedCopy :: String -> String -> IO Pixel
 saveResizedCopy fn folder = 
   withImage (loadJpegFile fn) (\x -> do
                                  resized <- resizeImage 80 60 x
                                  avg <- getJPGavg resized
                                  print avg
-                                 saveJpegFile 95 (printf "%s/%s_small.JPG" folder (filenameOnly fn)) resized
+                                 saveJpegFile 95 (printf "%s/%s_small.JPG" folder (filenameOnly $ noSpace fn)) resized
                                  return avg)
       where filenameOnly path = removeExtension $ removeFolders path
             removeFolders path = reverse $ takeWhile (/='/') (reverse path)
             removeExtension = takeWhile (/= '.')
-                                          
+
+-- calculates the average color of an image by sampling every fifth pixel
+-- r,g,b values are summed up and divided by the number of taken pixels
+-- to get their average, that is then returned as pixel                                          
 getJPGavg :: Graphics.GD.ByteString.Image -> IO Pixel
 getJPGavg image = do
   (w,h) <- imageSize image
@@ -69,11 +78,15 @@ analyse :: String -> String -> IO ()
 analyse path dbFolder = do
   putStrLn "Starte Analyse"
   dirContent <- getDirectoryContents path
+  -- append the full path to each of the filenames
   let contentWithFullPath = map (\x -> path ++ "/" ++ x) dirContent
   print contentWithFullPath
   createDirectoryIfMissing False dbFolder
+  -- create DB.txt or clear it if already exists
   writeFile (dbFolder ++ "/DB.txt") ""
+  -- we are only interested in files ending with .jpg or .JPG
   let filesWithPPMSuffix = (filter isJPG contentWithFullPath)
+  -- analyse every image
   mapM_ (analyseImage dbFolder) filesWithPPMSuffix
   putStrLn "Done!"
       where isJPG fn = (".JPG" `isSuffixOf` fn) || ".jpg" `isSuffixOf` fn
@@ -126,6 +139,7 @@ insertImage :: Graphics.GD.ByteString.Image -> String -> (String, (Int,Int)) -> 
 insertImage resImage folder (fn, offset) = do
   isVerbose <- isLoud
   when isVerbose $ putStrLn $ printf "Inserts: %s an %s" fn (show offset)
+  -- the inserted image has the name specified in DB.txt, but with '_small' as suffix
   let jpgname = printf "%s/%s_small.JPG" folder (filenameOnly fn)
   withImage (loadJpegFile jpgname) (\x -> copyRegion (0,0) (80,60) x offset resImage)
       where filenameOnly path = removeExtension $ removeFolders path
@@ -141,6 +155,8 @@ time action = do
     return (read . init $ show (diffUTCTime d2 d1), o)
 
 -- takes a list of fingerprints and returns the name of the image that best matches the color of a Pixel
+-- this is done by comparing the first two fingerprints in the list, removing the least fitting one
+-- then repeating the process until only one fingerprint is left - which must be the best
 findMatch :: [Fingerprint] -> Pixel -> String
 findMatch fps pix = snd $ minDiff (map (colorDiff pix) fps)
     where minDiff [x] = x
@@ -150,6 +166,8 @@ findMatch fps pix = snd $ minDiff (map (colorDiff pix) fps)
           minDiff [] = error "Invalid fingerprint"
           
 -- returns a tuple of color difference and filename
+-- to calculate the difference, the difference between red green and blue channel are calculated
+-- by subtracting their absolute value, then adding these three differences
 colorDiff :: Pixel -> Fingerprint -> (Int, String)
 colorDiff p1 (Fingerprint fn p2) = (abs (abs(pR p1 - pR p2)+abs(pG p1 - pG p2)+abs(pB p1 - pB p2)), fn)
 

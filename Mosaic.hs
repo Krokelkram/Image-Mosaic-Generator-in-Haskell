@@ -15,6 +15,9 @@ import Data.Time
 import Types
 import Menu
 
+
+-- the main function takes care of the command line inputs
+-- and runs the program in the mode the user has chosen (generate or analyse)
 main :: IO ()
 main = do
   modus <- cmdArgs "MosaicMaker v0.9" modes
@@ -30,21 +33,24 @@ main = do
     
 
 -- takes a filename and appends its statistics to a text file
+-- dbFolder is the path to database file
 analyseImage :: String -> String ->IO ()
 analyseImage dbFolder filename = do
   putStrLn $ printf "Analysing %s" filename
-  avg <- saveResizedCopy filename dbFolder
+  avg <- scaleAndAverage filename dbFolder
+  -- append a new line to the file, formatted as 'filename red green blue'
   appendFile (dbFolder ++ "/" ++ "DB.txt") $ printf "%s %s\n" (noSpace filename) (show avg)
   putStrLn "OK"
 
+-- replaces all spaces in a string by underscores
 noSpace :: String -> String
 noSpace str = map (\x -> if x==' ' then '_' else x) str
   
 -- opens the image on the path in first string and saves a smaller copy of it in
 -- the folder that is specified with the second string
 -- calculating the average color while doing so (which is then returned as a pixel)
-saveResizedCopy :: String -> String -> IO Pixel
-saveResizedCopy fn folder = 
+scaleAndAverage :: String -> String -> IO Pixel
+scaleAndAverage fn folder = 
   withImage (loadJpegFile fn) (\x -> do
                                  resized <- resizeImage 80 60 x
                                  avg <- getJPGavg resized
@@ -65,6 +71,10 @@ getJPGavg image = do
   pxs <- mapM (\x -> do 
                  colorC <- getPixel x image
                  let color = fromIntegral colorC :: Int
+                 -- GD returns colors as int values, the r g b values are obtained by shifting the number
+                 -- and then masking all but the needed bits for that value
+                 -- (to get the green value of 0x123456, the number is shifted to 0x001234
+                 -- then an 'and' operation with 0x0000FF (255) results in 0x000034, which is what we wanted)
                  return $ Pixel (shiftR color 16 .&. 255) (shiftR color 8 .&. 255) ( color .&. 255)) coords
   let !red   = sum (map pR pxs) `div` length coords
       !green = sum (map pG pxs) `div` length coords
@@ -172,6 +182,7 @@ colorDiff :: Pixel -> Fingerprint -> (Int, String)
 colorDiff p1 (Fingerprint fn p2) = (abs (abs(pR p1 - pR p2)+abs(pG p1 - pG p2)+abs(pB p1 - pB p2)), fn)
 
 -- takes a line from database and returns its information as an image fingerprint
+-- string has to be formatted as 'filename red green blue' separated by whitespaces
 dbLine2Fingerprint :: String -> Fingerprint
 dbLine2Fingerprint ln = Fingerprint fn (Pixel (read r) (read g) (read b))
     where (fn:r:g:b:_) = words ln

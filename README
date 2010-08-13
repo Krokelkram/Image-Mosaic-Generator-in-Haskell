@@ -1,15 +1,19 @@
 MosaicMaker v0.9 - README
 
+Compiling:
+
+Just type 'ghc --make -O2 Mosaic.hs'
+
 This is how it works:
 
 Simple usage:
 1) Copy the program into a folder that contains the images you want to use 
    in your mosaic (>500 different images are recommended to get good results)
 
-2) run it with the following argument: 'mosaic analyse'
+2) run it with the following argument: 'Mosaic analyse'
    This will create the image database in a subfolder called 'mosaicTiles'
 
-3) run it again, this time in generator mode: 'mosaic generate -f image.jpg'
+3) run it again, this time in generator mode: 'Mosaic generate -f image.jpg'
    where image.jpg' specifies the image you want to turn into a mosaic
 
 4) The resulting mosaic can be found in the file 'mosaic.jpg', in the same folder as the program
@@ -19,7 +23,9 @@ More options:
 
 To get a full overview of available options type 'mosaic -h'. A few interesting options are:
 
-- 'mosaic analyse -s path/to/images'         if your images are in a different folder than the program folder
-- 'mosaic analyse --dbPath path/to/db'	     if you want to create the database somewhere else than the mosaicTiles subFolder
+- 'Mosaic analyse -s path/to/images'         if your images are in a different folder than the program folder
+- 'Mosaic analyse --dbPath path/to/db'	     if you want to create the database somewhere else than the mosaicTiles subFolder
 
-- 'mosaic generate -f img.jpg -c 128 -r 128  where -c changes the number of columns and -r the number of rows of tiles
+- 'Mosaic generate -f img.jpg -c 128 -r 128  where -c changes the number of columns and -r the number of rows of tiles
+
+

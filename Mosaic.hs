@@ -112,6 +112,9 @@ pureTime action = do
     return (read . init $ show (diffUTCTime d2 d1), a)
 
 
+-- takes the image to 'mosaicify', the path where the result is saved
+-- the path to the database and the number of horizontal and vertical tiles
+-- to generate the mosaic
 generate :: String -> String -> String -> Int -> Int ->IO ()
 generate fn outFn dbFolder hTiles vTiles = do
   db <- readFile (dbFolder ++ "/" ++ "DB.txt")
